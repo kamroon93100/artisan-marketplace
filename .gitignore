@@ -19,6 +19,9 @@ build/
 .wrangler/
 coverage/
 *.log
+# Generated knowledge graph output. Rebuilt from source by `graphify`, so it
+# is never edited by hand and must not reach a commit.
+graphify-out/
 
 # Local API credentials
 /apps/api/.dev.vars
