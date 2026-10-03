@@ -1,0 +1,24 @@
+﻿node_modules/
+.pnpm-store/
+.env
+.env.*
+!.env.example
+# Local Worker development bindings. These hold real credentials for the
+# local object store and database and must never be committed.
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+# Local runtime logs and probe output written by verification scripts.
+tmp/
+# Stale compiled output from an ad-hoc tsc run with a custom outDir. It is
+# generated, never edited by hand, and must not reach a commit.
+.tmp-test/
+dist/
+build/
+.expo/
+.wrangler/
+coverage/
+*.log
+
+# Local API credentials
+/apps/api/.dev.vars

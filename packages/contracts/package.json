@@ -1,0 +1,16 @@
+{
+  "name": "@artisan-marketplace/contracts",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check": "pnpm run typecheck",
+    "typecheck": "tsc --noEmit",
+    "test": "echo \"Contract tests not created yet\""
+  },
+  "devDependencies": {
+    "typescript": "6.0.3"
+  }
+}

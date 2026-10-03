@@ -1,0 +1,46 @@
+﻿services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: artisan-marketplace-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: artisan_marketplace_dev
+      POSTGRES_USER: artisan_marketplace
+      POSTGRES_PASSWORD: artisan_marketplace_dev
+    ports:
+      - "55432:5432"
+    volumes:
+      - artisan-marketplace-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U artisan_marketplace -d artisan_marketplace_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Project-local S3-compatible object storage for media. Credentials are
+  # local development values and are mirrored in apps/api/.dev.vars, which
+  # is git-ignored.
+  object-storage:
+    image: rustfs/rustfs:latest
+    container_name: artisan-marketplace-storage
+    restart: unless-stopped
+    command: ["rustfs"]
+    environment:
+      RUSTFS_ACCESS_KEY: artisan_dev
+      RUSTFS_SECRET_KEY: artisan_dev_secret_2026
+      RUSTFS_VOLUMES: /data
+      RUSTFS_CONSOLE_CORS_ALLOWED_ORIGINS: "*"
+      RUSTFS_OBS_LOGGER_LEVEL: warn
+      RUSTFS_OBS_LOG_DIRECTORY: /logs
+      RUSTFS_OBS_ENVIRONMENT: production
+    ports:
+      # 9000 is the S3 API used by the Worker and the E2E tests.
+      # 9001 is the browser console.
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - artisan-marketplace-storage-data:/data
+
+volumes:
+  artisan-marketplace-postgres-data:
+  artisan-marketplace-storage-data:

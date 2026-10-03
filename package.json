@@ -1,0 +1,15 @@
+{
+    "name": "artisan-marketplace",
+    "private": true,
+    "packageManager": "pnpm@11.9.0",
+    "scripts": {
+        "check": "pnpm -r run check",
+        "test": "pnpm -r run test",
+        "typecheck": "pnpm -r run typecheck",
+        "verify:mobile": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/verify.ps1",
+        "verify": "pnpm run verify:mobile"
+    },
+    "devDependencies": {
+        "tsx": "^4.23.15"
+    }
+}

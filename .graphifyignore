@@ -1,0 +1,11 @@
+﻿# Agent/tooling internals are not product architecture
+.agents/
+.opencode/
+
+# Graphify output is generated data, not source
+graphify-out/
+
+# Local/editor/system files
+.vscode/
+.idea/
+*.log
