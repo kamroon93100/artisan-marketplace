@@ -179,8 +179,57 @@ function testDevVarsDoNotRedefineTheBinding(): void {
   }
 }
 
+/**
+ * The Worker entry must be the worker-only shell, and that shell must be
+ * what wires the precompiled Argon2 modules.
+ *
+ * Cloudflare Workers forbid runtime WebAssembly code generation, so the
+ * Argon2 binaries are precompiled at build time and handed to the Worker
+ * through the static `.wasm` imports in `src/worker.ts`. If `main` ever
+ * points back at the shared app, those imports leave the bundle graph: the
+ * Worker still builds and every unit suite still passes, but at runtime
+ * nothing registers the modules, `hashPassword` falls through to the
+ * Node-only disk path inside workerd, and the whole public auth surface
+ * answers 503 while the build is green. Pointing `main` at the app also
+ * silently drops the `/health` registration-order fix.
+ */
+function testWorkerEntryIsTheWorkerShell(): void {
+  const config = readJsonc(WRANGLER_CONFIG);
+
+  if (config.main !== 'src/worker.ts') {
+    fail(
+      `wrangler.jsonc main must be the worker-only entry src/worker.ts (statically imports the precompiled Argon2 modules and registers them before serving), received ${String(config.main)}.`,
+    );
+  }
+
+  const entry = readFileSync(
+    fileURLToPath(new URL('src/worker.ts', API_ROOT)),
+    'utf8',
+  );
+
+  for (const required of [
+    "from './modules/identity/infrastructure/argon2.wasm'",
+    "from './modules/identity/infrastructure/blake2b.wasm'",
+    "registerPrecompiledArgon2Modules",
+  ]) {
+    if (!entry.includes(required)) {
+      fail(`src/worker.ts no longer contains ${required}.`);
+    }
+  }
+
+  // The registration must run before the app can serve a request, which in
+  // an ES module means it is a top-level statement ahead of the default
+  // export, not inside a handler or after an await.
+  if (entry.indexOf('registerPrecompiledArgon2Modules') > entry.indexOf('export default')) {
+    fail(
+      'src/worker.ts must call registerPrecompiledArgon2Modules before exporting the app.',
+    );
+  }
+}
+
 testHyperdriveBindingIsConfigured();
 testLocalConnectionStringReachesTheResolver();
 testDevVarsDoNotRedefineTheBinding();
+testWorkerEntryIsTheWorkerShell();
 
 console.log('WRANGLER CONFIG TESTS PASSED');

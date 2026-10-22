@@ -80,6 +80,31 @@ app.onError((error, c) => {
 });
 
 /**
+ * Health is registered before the route mounts below, and that ordering is
+ * load-bearing rather than cosmetic.
+ *
+ * `authRoutes` and `inquiryRoutes` are both mounted at `/`, and their `*`
+ * middleware therefore runs for every path, including this one. The inquiry
+ * mount resolves an actor before any handler, so in an environment without
+ * the development seam (a deployed Worker, or `wrangler dev` --var
+ * APP_ENV:production) a health probe would be answered 401 UNAUTHENTICATED
+ * instead of 200 — an unmonitorable service. A handler responds and ends the
+ * chain, so registering health first keeps it public in every environment.
+ */
+app.get('/health', (c) => {
+  const context = c.get('requestContext');
+
+  return c.json({
+    ok: true,
+    service: 'artisan-marketplace-api',
+    environment:
+      c.env.APP_ENV ?? 'development',
+    requestId: context.requestId,
+    correlationId: context.correlationId,
+  });
+});
+
+/**
  * Route mounts. Modules are composed and mounted independently; the shared
  * `/catalog` prefix is the URL space a product's paths live in, not a
  * dependency between the modules serving them.
@@ -98,18 +123,5 @@ app.route('/catalog', aiRoutes);
 app.route('/catalog', reviewRoutes);
 app.route('/discovery', discoveryRoutes);
 app.route('/', inquiryRoutes);
-
-app.get('/health', (c) => {
-  const context = c.get('requestContext');
-
-  return c.json({
-    ok: true,
-    service: 'artisan-marketplace-api',
-    environment:
-      c.env.APP_ENV ?? 'development',
-    requestId: context.requestId,
-    correlationId: context.correlationId,
-  });
-});
 
 export default app;

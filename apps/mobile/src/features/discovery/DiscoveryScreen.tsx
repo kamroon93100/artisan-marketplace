@@ -22,10 +22,16 @@ import {
   type DiscoveryTransport,
 } from '@/network/discovery-transport';
 
-import { describeDiscoveryFailure, formatPublishedAt } from './discovery-display';
+import { describeDiscoveryFailure, formatPublishedAt, showsBackAffordance } from './discovery-display';
 
 type Props = {
-  onBack: () => void;
+  /**
+   * Optional: the screen is also the Explore tab's root, where there is
+   * nothing to go back to. When it is absent the back affordance is not
+   * rendered at all, rather than rendered and disabled — an unreachable
+   * control on a screen's first impression reads as a broken app.
+   */
+  onBack?: () => void;
   onOpenProduct: (productId: string) => void;
   /**
    * Injected so the screen can be exercised without a network, and so a test
@@ -63,8 +69,7 @@ export function DiscoveryScreen({
   onBack,
   onOpenProduct,
   transport,
-}: Props) {
-  const client = useMemo(
+}: Props) {  const client = useMemo(
     () => resolveDiscoveryTransport(transport),
     [transport],
   );
@@ -332,13 +337,15 @@ export function DiscoveryScreen({
         { paddingTop: safeAreaInsets.top + Spacing.two },
       ]}>
       <View style={styles.header}>
-        <Pressable
-          onPress={onBack}
-          accessibilityRole="button"
-          accessibilityLabel="Back to Explore"
-          style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}>
-          <ThemedText type="small">Back</ThemedText>
-        </Pressable>
+        {showsBackAffordance({ onBack }) ? (
+          <Pressable
+            onPress={onBack}
+            accessibilityRole="button"
+            accessibilityLabel="Back to Explore"
+            style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}>
+            <ThemedText type="small">Back</ThemedText>
+          </Pressable>
+        ) : null}
 
         <ThemedText type="subtitle">Discover</ThemedText>
 

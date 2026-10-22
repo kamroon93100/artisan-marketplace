@@ -1,5 +1,6 @@
 ﻿---
 description: Runs focused and milestone verification without editing project files.
+steps: 8
 mode: subagent
 permission:
   read:

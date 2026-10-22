@@ -18,6 +18,7 @@ export {
   allowsInMemorySessionStore,
   getIdentityService,
   createIdentityService,
+  hasSessionStoreConfigured,
 } from './composition.js';
 export type { IdentityEnv } from './composition.js';
 export {

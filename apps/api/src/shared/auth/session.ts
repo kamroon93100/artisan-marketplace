@@ -2,7 +2,14 @@ import { AppError } from '../errors/app-error.js';
 import type { UnauthenticatedReason } from '../errors/app-error.js';
 import { constantTimeEquals } from '../security/constant-time.js';
 import type { ActorContext } from '../context/request-context.js';
-import { getIdentityService, createIdentityService } from '../../modules/identity/index.js';
+import {
+  getIdentityService,
+  createIdentityService,
+  hasSessionStoreConfigured,
+  allowsInMemorySessionStore,
+} from '../../modules/identity/index.js';
+import type { SessionVerification } from '../../modules/identity/index.js';
+import type { PostgresConnectionValue } from '../persistence/postgres-connection.js';
 
 export type SessionBindingEnv = {
   APP_ENV?: string;
@@ -19,8 +26,17 @@ export type SessionBindingEnv = {
    * resolves authoritative roles from server-side session state.
    */
   SESSION_ACTOR_ID?: string;
-  /** Database connection pool for durable session storage (Phase 1B) */
+  /**
+   * Injected pool seam for tests and proofs. A deployed Worker never
+   * receives it; it carries `HYPERDRIVE` instead (below).
+   */
   DB_POOL?: import('pg').Pool;
+  /**
+   * The database binding a deployed Worker actually receives. Identity
+   * resolves its PostgreSQL session store from it, so it is also what
+   * tells this boundary that a session *can* be verified here.
+   */
+  HYPERDRIVE?: PostgresConnectionValue;
 };
 
 const BEARER_PREFIX = 'bearer ';
@@ -61,6 +77,53 @@ function presentedToken(
 }
 
 /**
+ * The refusal for a request that reached the end of the fallback without
+ * resolving to an actor.
+ *
+ * M8 Phase 1: "Unauthenticated requests to protected routes receive 401
+ * (`UNAUTHENTICATED`); a deployment that cannot verify a session still
+ * fails closed (`DEPENDENCY_FAILED`) outside development/test."
+ *
+ * The two answers mean genuinely different things:
+ *
+ * - A request whose credential a real session store just refused — or one
+ *   that arrives where a session store is configured (the `DB_POOL`
+ *   seam, or the `HYPERDRIVE` binding a deployed Worker receives) — is an
+ *   *authentication* failure: that deployment can verify a session, so
+ *   the client gets the generic `UNAUTHENTICATED` (HTTP 401, no
+ *   `details`) it can act on: present a valid credential or sign in
+ *   again. Answering `DEPENDENCY_FAILED` here would tell the client the
+ *   server is broken when in fact it either refused the credential or
+ *   never received one.
+ * - A request that reaches this point with no store and no static binding
+ *   is a *deployment* fault: there is nothing to verify a session against,
+ *   so the request is refused with `DEPENDENCY_FAILED` rather than being
+ *   handed an identity it never proved.
+ *
+ * The configured static session and the development/test seam are still
+ * consulted first and keep exactly the meaning they have today.
+ */
+function refusalForUnresolvedRequest(
+  env: SessionBindingEnv,
+  refusedBySessionStore: boolean,
+): AppError {
+  const canVerifySession =
+    refusedBySessionStore || hasSessionStoreConfigured(env);
+
+  if (canVerifySession) {
+    return new AppError(
+      'UNAUTHENTICATED',
+      'A valid session is required.',
+    );
+  }
+
+  return new AppError(
+    'DEPENDENCY_FAILED',
+    'Session verification is not configured.',
+  );
+}
+
+/**
  * Resolves the actor for a request that must not proceed anonymously.
  *
  * Authentication and authorization are separate decisions: this proves
@@ -89,8 +152,43 @@ export async function requireActor(
   const identity =
     token === null ? null : createIdentityService(env);
 
+  // True once a real session store has looked at this credential and not
+  // recognized it. From that moment the deployment has demonstrated that
+  // it *can* verify a session, so the end of the fallback must answer 401
+  // rather than reporting that verification is unavailable (M8 Phase 1).
+  let refusedBySessionStore = false;
+
   if (identity) {
-    const verification = await identity.verifyAccessTokenAsync(token);
+    // A store that cannot answer is a persistence failure, not an
+    // authentication failure: the deployment is configured to verify
+    // sessions and just cannot reach the database. Without this guard a
+    // raw driver error would escape to the error handler as a 500,
+    // losing the `DEPENDENCY_FAILED` class that says "retry later"
+    // (M8 task contract P16).
+    let verification: SessionVerification;
+
+    try {
+      verification = await identity.verifyAccessTokenAsync(token);
+    } catch (error) {
+      if (error instanceof AppError) {
+        throw error;
+      }
+
+      // The cause is recorded here because the `AppError` below is
+      // handled as a refusal by the error mapper rather than as an
+      // unexpected error, so nothing else would log it: a store outage
+      // must still be diagnosable (AGENTS.md §12). No credential and no
+      // connection string is logged.
+      console.error(
+        '[identity] session store unavailable:',
+        error instanceof Error ? error.message : String(error),
+      );
+
+      throw new AppError(
+        'DEPENDENCY_FAILED',
+        'Session verification is temporarily unavailable.',
+      );
+    }
 
     if (verification.ok) {
       return {
@@ -131,6 +229,12 @@ export async function requireActor(
         } satisfies { reason: UnauthenticatedReason },
       );
     }
+
+    // `SESSION_UNKNOWN` / `CREDENTIAL_MISSING`: the store answered, so
+    // this deployment can verify a session. The credential still falls
+    // through to the legacy seams below, but if nothing resolves it the
+    // answer is a client-visible 401, never "verification unavailable".
+    refusedBySessionStore = true;
   }
 
   const expectedToken = env.SESSION_TOKEN?.trim();
@@ -168,18 +272,24 @@ export async function requireActor(
     }
   }
 
-  // A deployment that cannot verify a session must not pretend that an
-  // unauthenticated caller is authorized. Refusing the request is the
-  // only safe answer, and it is a deployment fault, not a client one.
-  throw new AppError(
-    'DEPENDENCY_FAILED',
-    'Session verification is not configured.',
-  );
+  // Nothing resolved this request, and it must never proceed as the
+  // anonymous actor. Refusing is the only safe answer; the code says
+  // whether that refusal is a credential the server could judge (401) or
+  // a deployment with no way to verify a session at all
+  // (DEPENDENCY_FAILED, a deployment fault rather than a client one).
+  throw refusalForUnresolvedRequest(env, refusedBySessionStore);
 }
 
 /**
  * Synchronous version of requireActor for backward compatibility
  * with in-memory store only environments.
+ *
+ * It cannot verify durable sessions: every durable read is asynchronous,
+ * so where sessions live in PostgreSQL this boundary refuses explicitly
+ * (`DEPENDENCY_FAILED`) rather than reporting a verification it never
+ * performed. The configured static session and the development seam,
+ * both synchronous, keep answering exactly as they do today.
+ *
  * @deprecated Use async requireActor instead.
  */
 export function requireActorSync(
@@ -191,7 +301,20 @@ export function requireActorSync(
   const identity =
     token === null ? null : getIdentityService(env);
 
-  if (identity) {
+  // `getIdentityService` (the alias of `createIdentityService`) returns
+  // a PostgreSQL-backed service only outside development/test (where the
+  // in-memory store answers). For that store the only synchronous method
+  // is `all()`, a stub that never queries the database: consulting it
+  // would refuse valid sessions and strip the expired/revoked reasons,
+  // so it is not consulted at all.
+  const durableIdentity =
+    identity !== null && !allowsInMemorySessionStore(env.APP_ENV);
+
+  // Same meaning as in `requireActor`: the store judged this credential
+  // and did not recognize it, so this deployment can verify a session.
+  let refusedBySessionStore = false;
+
+  if (identity && !durableIdentity) {
     const verification = identity.verifyAccessToken(token);
 
     if (verification.ok) {
@@ -221,6 +344,8 @@ export function requireActorSync(
         } satisfies { reason: UnauthenticatedReason },
       );
     }
+
+    refusedBySessionStore = true;
   }
 
   const expectedToken = env.SESSION_TOKEN?.trim();
@@ -253,8 +378,22 @@ export function requireActorSync(
     }
   }
 
-  throw new AppError(
-    'DEPENDENCY_FAILED',
-    'Session verification is not configured.',
-  );
+  // A credential was presented and the only store that could judge it is
+  // durable, which this synchronous path cannot consult. The asynchronous
+  // `requireActor` — the boundary every business module uses — is the one
+  // that verifies durable sessions; this refusal keeps the failure
+  // vocabulary honest instead of answering with a judgment never made.
+  if (durableIdentity) {
+    throw new AppError(
+      'DEPENDENCY_FAILED',
+      'Synchronous session verification is not available for durable session storage.',
+    );
+  }
+
+  // Nothing resolved this request, and it must never proceed as the
+  // anonymous actor. Refusing is the only safe answer; the code says
+  // whether that refusal is a credential the server could judge (401) or
+  // a deployment with no way to verify a session at all
+  // (DEPENDENCY_FAILED, a deployment fault rather than a client one).
+  throw refusalForUnresolvedRequest(env, refusedBySessionStore);
 }

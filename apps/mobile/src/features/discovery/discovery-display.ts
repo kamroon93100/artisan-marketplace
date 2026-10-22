@@ -1,4 +1,4 @@
-import { DiscoveryTransportError } from '@/network/discovery-transport';
+import { DiscoveryTransportError } from '../../network/discovery-transport';
 
 /**
  * A discovery failure, as the screens show it.
@@ -28,6 +28,20 @@ export function describeDiscoveryFailure(error: unknown): {
         : 'Something went wrong.',
     retryable: true,
   };
+}
+
+/**
+ * Whether a discovery screen renders a back affordance.
+ *
+ * The Explore tab's root is the same screen as the pushed
+ * `/explore/discovery` route, and only the pushed one has somewhere to go
+ * back to. An unreachable back control on a tab's first impression reads as
+ * a broken app, so it is absent rather than disabled.
+ */
+export function showsBackAffordance(props: {
+  onBack?: () => void;
+}): boolean {
+  return typeof props.onBack === 'function';
 }
 
 /**

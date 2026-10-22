@@ -102,7 +102,7 @@ async function buyerRequest(
  * The suites in this file share one in-memory catalog, so a search term has
  * to be unique to the product that owns it. Without that, the search
  * assertions would depend on how many products earlier tests happened to
- * publish — a test that passes for the wrong reason is worse than one that
+ * publish â€” a test that passes for the wrong reason is worse than one that
  * fails.
  */
 async function publishProduct(
@@ -276,7 +276,7 @@ function assertBuyerSafePayload(
 
 /**
  * A published product is discoverable, and a product nobody published is not
- * — through either discovery route.
+ * â€” through either discovery route.
  */
 async function testVisibilityThroughEveryRoute(): Promise<void> {
   const published = await publishProduct('visible');
@@ -691,6 +691,43 @@ async function testValidationAndErrorCategories(): Promise<void> {
  * Nothing a buyer receives carries a draft, private, or AI field, on any
  * discovery route.
  */
+async function testProductIdValidation(): Promise<void> {
+  const malformed = await buyerRequest(
+    '/discovery/products/not-a-valid-product-id',
+  );
+
+  expect(
+    malformed.status === 400,
+    `Expected 400 for malformed productId, got ${malformed.status}.`,
+  );
+
+  const malformedBody = await readJson<{
+    error: {
+      code: string;
+      message: string;
+      details?: { field?: string };
+    };
+  }>(malformed);
+
+  expect(
+    malformedBody.error.code === 'VALIDATION_FAILED',
+    `Expected VALIDATION_FAILED, got ${malformedBody.error.code}.`,
+  );
+
+  expect(
+    malformedBody.error.details?.field === 'productId',
+    'The validation error identifies productId.',
+  );
+
+  const missing = await buyerRequest(
+    '/discovery/products/00000000-0000-4000-8000-00000000dead',
+  );
+
+  expect(
+    missing.status === 404,
+    `Expected 404 for a well-formed nonexistent UUID, got ${missing.status}.`,
+  );
+}
 async function testBuyerPayloadsAreFieldChecked(): Promise<void> {
   const published = await publishProduct('fields');
 
@@ -759,6 +796,7 @@ async function main(): Promise<void> {
   await testArchivingRemovesTheListing();
   await testSearchAndPagination();
   await testValidationAndErrorCategories();
+  await testProductIdValidation();
   await testBuyerPayloadsAreFieldChecked();
   await testDiscoveryIsReadOnly();
 

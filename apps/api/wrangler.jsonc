@@ -1,15 +1,14 @@
 {
   "name": "artisan-marketplace-api",
-  "main": "src/index.ts",
+  // The Worker entry is the worker-only shell around the shared app in
+  // `src/index.ts`. It carries the build-time precompiled WebAssembly
+  // imports (Cloudflare forbids runtime wasm code generation); the app
+  // itself stays importable from the Node test suite.
+  "main": "src/worker.ts",
   "compatibility_date": "2026-09-18",
   // node-postgres reaches PostgreSQL over Node's TCP and TLS built-ins,
   // so the PostgreSQL repositories cannot connect without this flag.
   "compatibility_flags": ["nodejs_compat"],
-  // @node-rs/argon2 requires the wasm32-wasi binary; alias it so the
-  // bundler can resolve the import in @node-rs/argon2/browser.js.
-  "alias": {
-    "@node-rs/argon2-wasm32-wasi": "@node-rs/argon2-wasm32-wasi"
-  },
   // The Worker reaches PostgreSQL only through a Hyperdrive binding. A
   // deployed Worker receives the real Hyperdrive configuration; `wrangler
   // dev` has no Hyperdrive configuration to resolve, so it connects

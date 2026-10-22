@@ -1,4 +1,5 @@
 import { getApiBaseUrl } from '../config/api';
+import { authorizationHeaders } from './authorization';
 import {
   AI_PROPOSAL_FIELDS,
   AI_RISK_LEVELS,
@@ -554,7 +555,10 @@ export class HttpReviewTransport
     try {
       response = await fetch(`${getApiBaseUrl()}${path}`, {
         method,
-        headers,
+        headers: {
+          ...(await authorizationHeaders()),
+          ...headers,
+        },
         ...(requestBody === undefined
           ? {}
           : { body: JSON.stringify(requestBody) }),

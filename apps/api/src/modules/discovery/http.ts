@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { AppError } from '../../shared/errors/app-error.js';
 import type { Context } from 'hono';
 import type { ApiEnv } from '../../shared/context/api-env.js';
 import { requireActor } from '../../shared/auth/session.js';
@@ -12,7 +13,7 @@ export const discoveryRoutes = new Hono<ApiEnv>();
  * Discovery requires an authenticated actor, like every other route here.
  *
  * The reason is the rate limiter, not the data. Published catalog data is
- * public by construction — publishing is the act that makes it visible — so
+ * public by construction â€” publishing is the act that makes it visible â€” so
  * authentication buys no confidentiality. What it buys is a *subject*:
  * `rateLimitMiddleware` keys its budget on the actor, and an unauthenticated
  * discovery surface would collapse every anonymous caller into one shared
@@ -59,6 +60,17 @@ function routeProductId(c: Context<ApiEnv>): string {
     );
   }
 
+  const uuidPattern =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  if (!uuidPattern.test(productId)) {
+    throw new AppError(
+      'VALIDATION_FAILED',
+      'productId must be a valid UUID.',
+      { field: 'productId' },
+    );
+  }
+
   return productId;
 }
 
@@ -67,7 +79,7 @@ function routeProductId(c: Context<ApiEnv>): string {
  *
  * Every parameter is untrusted and is validated before any business logic
  * runs, so a malformed page size or search term is reported as invalid input
- * with a message that names the parameter at fault — the boundary
+ * with a message that names the parameter at fault â€” the boundary
  * validation ADR-009 requires, done before the catalog is asked anything.
  */
 discoveryRoutes.get('/products', async (c) => {

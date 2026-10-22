@@ -17,6 +17,8 @@ import {
   type DiscoveryPublishedProductResponse,
   type DiscoveryTransport,
 } from '@/network/discovery-transport';
+import { InquiryComposer } from '@/features/inquiry/InquiryComposer';
+import type { InquiryTransport } from '@/network/inquiry-transport';
 
 import { describeDiscoveryFailure, formatPublishedAt } from './discovery-display';
 
@@ -31,6 +33,13 @@ type Props = {
    * calls it fire again, forever.
    */
   transport?: DiscoveryTransport;
+  /**
+   * The buyer's write surface against this listing. Injected for the same
+   * reason as `transport`, and absent when the screen is shown where asking a
+   * question makes no sense — there is nothing to ask about a listing that
+   * will not load, and the composer is rendered only once the listing has.
+   */
+  inquiryTransport?: InquiryTransport;
 };
 
 /**
@@ -48,6 +57,7 @@ export function ProductDetailScreen({
   productId,
   onBack,
   transport,
+  inquiryTransport,
 }: Props) {
   const client = useMemo(
     () => resolveDiscoveryTransport(transport),
@@ -170,6 +180,13 @@ export function ProductDetailScreen({
         <ThemedText type="default" style={styles.description}>
           {product.description}
         </ThemedText>
+
+        {inquiryTransport ? (
+          <InquiryComposer
+            productId={product.productId}
+            onSend={(request) => inquiryTransport.create(request)}
+          />
+        ) : null}
       </ScrollView>
     );
   };

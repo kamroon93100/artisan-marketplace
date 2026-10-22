@@ -12,6 +12,7 @@
  */
 
 import { getApiBaseUrl } from '../config/api';
+import { authorizationHeaders } from './authorization';
 
 /**
  * Default number of results when the screen does not ask for a size.
@@ -344,18 +345,34 @@ export class HttpDiscoveryTransport
 
   /**
    * One request, one place that turns a response into either a value or a
-   * classified failure. Read-only and headerless: discovery takes no
-   * credentials, because a read over published snapshots is not a
-   * permission decision.
+   * classified failure.
+   *
+   * The session's credential is attached when there is one. Discovery is
+   * read-only over published snapshots and takes no permission decision
+   * from it, but the server still resolves the actor for every request, and
+   * in a deployment that can verify a session an anonymous request is
+   * refused — so a signed-in buyer must send their credential here too.
    */
   private async send(
     path: string,
   ): Promise<unknown> {
     let response: Response;
 
+    // The session's credential is attached when there is one. Discovery is
+    // read-only over published snapshots and takes no permission decision
+    // from it, but the server still resolves the actor for every request,
+    // and in a deployment that can verify a session an anonymous request is
+    // refused — so a signed-in buyer must send their credential here too.
+    // A request with no session stays headerless rather than carrying an
+    // empty header bag.
+    const sessionHeaders = await authorizationHeaders();
+
     try {
       response = await fetch(`${getApiBaseUrl()}${path}`, {
         method: 'GET',
+        ...(Object.keys(sessionHeaders).length === 0
+          ? {}
+          : { headers: sessionHeaders }),
       });
     } catch (error) {
       throw new DiscoveryTransportError(

@@ -15,10 +15,33 @@ import type {
   SessionVerification,
 } from '../domain/session.js';
 import type { SessionStore } from './session-store.js';
-import { hashPassword, verifyPassword, isApprovedArgon2idHash } from '../infrastructure/password.js';
+import { hashPassword, verifyPassword } from '../infrastructure/password.js';
 
 /** Injectable clock so expiry is testable without sleeping. */
 export type Clock = () => number;
+
+/**
+ * Sanitized register-failure diagnostic (stage + error class only).
+ * Never includes password material, tokens, connection strings, SQL
+ * parameters, or password hashes: connection URLs, PHC hashes, and any
+ * `password...` fragment are redacted before logging, and the message
+ * is truncated.
+ */
+function classifyRegisterFailure(stage: string, error: unknown): void {
+  const name = error instanceof Error ? error.name : typeof error;
+  const maybeCode = (error as { code?: unknown } | null | undefined)?.code;
+  const code = typeof maybeCode === 'string' ? maybeCode : undefined;
+  const raw = error instanceof Error ? error.message : String(error);
+  const message = raw
+    .replace(/postgres(?:ql)?:\/\/\S+/gi, 'postgres://[redacted]')
+    .replace(/\$argon2[^\s"']+/gi, '[phc-hash]')
+    .replace(/password[^\s,;]*/gi, 'password[redacted]')
+    .slice(0, 200);
+  console.error(
+    '[identity] register failed',
+    JSON.stringify({ stage, name, code, message }),
+  );
+}
 
 export type EstablishSessionInput = {
   /** Server-assigned identity. Never taken from a request. */
@@ -43,8 +66,10 @@ export type EstablishSessionInput = {
  * - Every failure is an explicit reason (ADR-006 failure states), never a
  *   silent `null` and never a generic success. Reasons carry no credential
  *   material, so they are safe to propagate into errors and logs.
- * - Nothing here logs. Credentials leave this class only through the value
- *   returned by `establish`/`refresh`.
+   * - Nothing here logs credential material. Register failures are logged
+   *   only as stage + error class + sanitized message (no password, token,
+   *   hash, or connection details). Credentials leave this class only
+   *   through the value returned by `establish`/`refresh`.
  *
  * Lifetime and rotation rules are the approved ones: 15-minute access,
  * 30-day absolute refresh window pinned to establishment, single-use
@@ -209,6 +234,15 @@ export class IdentityService {
       });
     }
 
+    // Fetch username from account for the response
+    let username = actorId; // fallback
+    if (this.store.findAccountById) {
+      const account = await this.store.findAccountById(actorId);
+      if (account) {
+        username = account.username;
+      }
+    }
+
     return {
       sessionId,
       accessToken,
@@ -217,7 +251,7 @@ export class IdentityService {
       refreshExpiresAt: record.refreshExpiresAt,
       actor: {
         actorId,
-        username: input.actorId,
+        username,
         roles: input.roles,
       },
     };
@@ -296,90 +330,105 @@ export class IdentityService {
       );
     }
 
-    // Check for duplicate username (Q3.4, Q5.4)
-    if (this.isDurableStore && this.store.findAccountByNormalizedUsername) {
-      const existing = await this.store.findAccountByNormalizedUsername(normalizedUsername);
-      if (existing) {
-        throw new AppError(
-          'CONFLICT',
-          'Username already exists.',
-          { field: 'username' },
-        );
+    // Operational segment: any non-AppError failure here is classified by
+    // stage (sanitized) before it surfaces as 503 from the HTTP layer.
+    let stage = 'duplicate-username-check';
+    try {
+      // Check for duplicate username (Q3.4, Q5.4)
+      if (this.isDurableStore && this.store.findAccountByNormalizedUsername) {
+        const existing = await this.store.findAccountByNormalizedUsername(normalizedUsername);
+        if (existing) {
+          throw new AppError(
+            'CONFLICT',
+            'Username already exists.',
+            { field: 'username' },
+          );
+        }
       }
-    }
 
-    // Hash password with Argon2id (Q5.1)
-    const passwordHash = await hashPassword(input.password);
+      // Hash password with Argon2id (Q5.1)
+      stage = 'password-hash';
+      const passwordHash = await hashPassword(input.password);
 
-    // Create account
-    const issuedAt = this.now();
-    const actorId = crypto.randomUUID();
+      // Create account
+      stage = 'persist-account';
+      const issuedAt = this.now();
+      const actorId = crypto.randomUUID();
 
-    const account = {
-      id: actorId,
-      username: input.username.trim(), // Store original case for display
-      usernameNormalized: normalizedUsername,
-      passwordHash,
-      roles: ['BUYER'] as const, // Q3.3: BUYER only
-      createdAt: issuedAt,
-      updatedAt: issuedAt,
-    };
+      const account = {
+        id: actorId,
+        username: input.username.trim(), // Store original case for display
+        usernameNormalized: normalizedUsername,
+        passwordHash,
+        roles: ['BUYER'] as const, // Q3.3: BUYER only
+        createdAt: issuedAt,
+        updatedAt: issuedAt,
+      };
 
-    // Persist account
-    if (this.isDurableStore && this.store.createAccount) {
-      await this.store.createAccount(account);
-    }
+      // Persist account
+      if (this.isDurableStore && this.store.createAccount) {
+        await this.store.createAccount(account);
+      }
 
-    // Establish initial session (Q5.4: auto-establish session)
-    const sessionId = crypto.randomUUID();
-    const issuedAtSession = this.now();
-    const accessToken = mintCredential();
-    const refreshToken = mintCredential();
+      // Establish initial session (Q5.4: auto-establish session)
+      stage = 'persist-session';
+      const sessionId = crypto.randomUUID();
+      const issuedAtSession = this.now();
+      const accessToken = mintCredential();
+      const refreshToken = mintCredential();
 
-    const record: SessionRecord = {
-      sessionId,
-      actorId,
-      roles: ['BUYER'],
-      refreshExpiresAt: issuedAtSession + REFRESH_TOKEN_LIFETIME_MS,
-      accessToken,
-      accessExpiresAt: issuedAtSession + ACCESS_TOKEN_LIFETIME_MS,
-      refreshToken,
-      previousRefreshToken: null,
-      refreshRevokedAt: null,
-      revokedAt: null,
-    };
-
-    if (this.isDurableStore && this.store.putAsync) {
-      await this.store.putAsync(record);
-    } else {
-      this.store.put(record);
-    }
-
-    if (this.isDurableStore && this.store.createRefreshGrant) {
-      await this.store.createRefreshGrant({
-        id: crypto.randomUUID(),
+      const record: SessionRecord = {
         sessionId,
-        token: refreshToken,
-        issuedAt: issuedAtSession,
-        expiresAt: issuedAtSession + REFRESH_TOKEN_LIFETIME_MS,
-      });
-    }
-
-    // For in-memory store, account persistence is not available
-    // This is acceptable for test/dev environments
-
-    return {
-      sessionId,
-      accessToken,
-      refreshToken,
-      accessExpiresAt: record.accessExpiresAt,
-      refreshExpiresAt: record.refreshExpiresAt,
-      actor: {
         actorId,
-        username: account.username,
         roles: ['BUYER'],
-      },
-    };
+        refreshExpiresAt: issuedAtSession + REFRESH_TOKEN_LIFETIME_MS,
+        accessToken,
+        accessExpiresAt: issuedAtSession + ACCESS_TOKEN_LIFETIME_MS,
+        refreshToken,
+        previousRefreshToken: null,
+        refreshRevokedAt: null,
+        revokedAt: null,
+      };
+
+      if (this.isDurableStore && this.store.putAsync) {
+        await this.store.putAsync(record);
+      } else {
+        this.store.put(record);
+      }
+
+      stage = 'persist-refresh-grant';
+      if (this.isDurableStore && this.store.createRefreshGrant) {
+        await this.store.createRefreshGrant({
+          id: crypto.randomUUID(),
+          sessionId,
+          token: refreshToken,
+          issuedAt: issuedAtSession,
+          expiresAt: issuedAtSession + REFRESH_TOKEN_LIFETIME_MS,
+        });
+      }
+
+      // For in-memory store, account persistence is not available
+      // This is acceptable for test/dev environments
+
+      return {
+        sessionId,
+        accessToken,
+        refreshToken,
+        accessExpiresAt: record.accessExpiresAt,
+        refreshExpiresAt: record.refreshExpiresAt,
+        actor: {
+          actorId,
+          username: account.username,
+          roles: ['BUYER'],
+        },
+      };
+    } catch (error) {
+      if (error instanceof AppError) {
+        throw error;
+      }
+      classifyRegisterFailure(stage, error);
+      throw error;
+    }
   }
 
   /**
@@ -472,7 +521,6 @@ export class IdentityService {
       refreshRevokedAt: null,
       revokedAt: null,
     };
-
     if (this.isDurableStore && this.store.putAsync) {
       await this.store.putAsync(record);
     } else {
@@ -694,7 +742,7 @@ export class IdentityService {
         refreshExpiresAt: record.refreshExpiresAt,
         actor: {
           actorId: record.actorId,
-          username: '', // In-memory store doesn't have username
+          username: record.actorId, // In-memory store doesn't have username; use actorId as fallback
           roles: record.roles,
         },
       },
@@ -772,6 +820,15 @@ export class IdentityService {
         return { ok: false, reason: 'SESSION_UNKNOWN' };
       }
 
+      // Fetch username from account for the response
+      let username = updatedSession.actorId; // fallback
+      if (this.store.findAccountById) {
+        const account = await this.store.findAccountById(updatedSession.actorId);
+        if (account) {
+          username = account.username;
+        }
+      }
+
       return {
         ok: true,
         session: {
@@ -782,7 +839,7 @@ export class IdentityService {
           refreshExpiresAt: updatedSession.refreshExpiresAt,
           actor: {
             actorId: updatedSession.actorId,
-            username: updatedSession.actorId, // SessionRecord doesn't have username
+            username,
             roles: updatedSession.roles,
           },
         },

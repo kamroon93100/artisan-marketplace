@@ -14,6 +14,7 @@
         "@node-rs/argon2": "^2.2.1",
         "@node-rs/argon2-wasm32-wasi": "^2.2.1",
         "aws4fetch": "^1.0.20",
+        "hash-wasm": "^4.12.0",
         "hono": "4.13.7",
         "pg": "^8.23.0"
     },

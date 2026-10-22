@@ -1,4 +1,5 @@
 ﻿import { getApiBaseUrl } from '../config/api';
+import { authorizationHeaders } from './authorization';
 import {
   ProductSyncTransportError,
   type CreateProductSyncRequest,
@@ -20,6 +21,7 @@ export class HttpProductSyncTransport
         {
           method: 'POST',
           headers: {
+            ...(await authorizationHeaders()),
             'content-type': 'application/json',
             'idempotency-key': request.idempotencyKey,
           },

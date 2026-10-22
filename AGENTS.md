@@ -510,6 +510,26 @@ Agents must not commit, push, open pull requests, merge, deploy, or mutate
 external production systems without explicit human authorization.
 
 ---
+
+## 16B. Operational Safeguards
+
+These rules bound how an agent spends attempts while diagnosing and fixing a
+problem. They do not replace the Verification Contract (16) or the Agent
+Execution Protocol (16A); they limit looping and unfocused work.
+
+- Handle one root cause at a time.
+- Allow no more than two attempts at any failing diagnostic.
+- Never repeat an identical failed command without changing the hypothesis.
+- Use focused file reads and bounded commands; prefer a result over narration.
+- Do not run mobile end-to-end checks while the emulator, Metro, or API is unavailable.
+- Never kill all Node processes to recover a service.
+- Never claim a test passed without its actual successful output.
+- Preserve existing work. No commits, pushes, deployments, database resets, migration edits, or secret exposure.
+
+When a diagnostic does not locate its cause within the attempt budget, stop and
+report the exact files and evidence examined instead of looping.
+
+---
 ## 17. Git Discipline
 
 Keep commits small and meaningful.

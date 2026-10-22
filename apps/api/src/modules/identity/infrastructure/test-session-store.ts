@@ -2,11 +2,14 @@ import { InMemorySessionStore } from './in-memory-session-store.js';
 import type { SessionStore } from '../application/session-store.js';
 import type { SessionRecord } from '../domain/session.js';
 import type { Role } from '../domain/roles.js';
-import { hashPassword, verifyPassword } from '../infrastructure/password.js';
+import { verifyPassword } from '../infrastructure/password.js';
 
 /**
  * Extended in-memory session store with account management for testing.
  * This is only for testing - production uses PostgresSessionStore.
+ *
+ * Overrides session token storage to hash tokens (matching PostgresSessionStore behavior),
+ * while inheriting account management from InMemorySessionStore.
  */
 export class TestSessionStore extends InMemorySessionStore implements SessionStore {
   // Refresh grant storage for R-C durable refresh-grant history
@@ -18,16 +21,6 @@ export class TestSessionStore extends InMemorySessionStore implements SessionSto
     expiresAt: number;
     consumedAt: number | null;
     rotatedTo: string | null;
-  }>();
-
-  private readonly accounts = new Map<string, {
-    id: string;
-    username: string;
-    usernameNormalized: string;
-    passwordHash: string;
-    roles: readonly string[];
-    createdAt: number;
-    updatedAt: number;
   }>();
 
   private hash(credential: string): string {
@@ -296,80 +289,5 @@ export class TestSessionStore extends InMemorySessionStore implements SessionSto
       }
     }
     return null;
-  }
-
-  // =========================================================================
-  // Account management methods
-  // =========================================================================
-
-  async createAccount(account: {
-    id: string;
-    username: string;
-    usernameNormalized: string;
-    passwordHash: string;
-    roles: readonly string[];
-    createdAt: number;
-    updatedAt: number;
-  }): Promise<void> {
-    this.accounts.set(account.usernameNormalized, {
-      id: account.id,
-      username: account.username,
-      usernameNormalized: account.usernameNormalized,
-      passwordHash: account.passwordHash,
-      roles: account.roles,
-      createdAt: account.createdAt,
-      updatedAt: account.updatedAt,
-    });
-  }
-
-  async findAccountByNormalizedUsername(usernameNormalized: string): Promise<{
-    id: string;
-    username: string;
-    usernameNormalized: string;
-    passwordHash: string;
-    roles: readonly string[];
-    createdAt: number;
-    updatedAt: number;
-  } | null> {
-    const account = this.accounts.get(usernameNormalized);
-    if (!account) return null;
-    return { ...account };
-  }
-
-  async findAccountById(id: string): Promise<{
-    id: string;
-    username: string;
-    usernameNormalized: string;
-    passwordHash: string;
-    roles: readonly string[];
-    createdAt: number;
-    updatedAt: number;
-  } | null> {
-    for (const account of this.accounts.values()) {
-      if (account.id === id) {
-        return { ...account };
-      }
-    }
-    return null;
-  }
-
-  async verifyAccountPassword(usernameNormalized: string, password: string): Promise<{
-    id: string;
-    username: string;
-    usernameNormalized: string;
-    roles: readonly Role[];
-  } | null> {
-    const account = this.accounts.get(usernameNormalized);
-    if (!account) return null;
-
-    const valid = await verifyPassword(password, account.passwordHash);
-    if (!valid) return null;
-
-    return {
-      id: account.id,
-      username: account.username,
-      usernameNormalized: account.usernameNormalized,
-      roles: account.roles as readonly Role[],
-    };
   }
 }

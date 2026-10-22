@@ -1,5 +1,6 @@
 ﻿---
 description: Autonomous project lead that plans, implements, verifies, delegates, and stops at human decision boundaries.
+steps: 8
 mode: primary
 permission:
   read:

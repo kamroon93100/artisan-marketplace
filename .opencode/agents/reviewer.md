@@ -1,5 +1,6 @@
 ﻿---
 description: Independent adversarial reviewer that finds defects, regressions, security issues, and unnecessary complexity without editing files.
+steps: 8
 mode: subagent
 permission:
   read:

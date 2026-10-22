@@ -3,6 +3,7 @@ import { AppError } from '../../shared/errors/app-error.js';
 import type { ApiEnv } from '../../shared/context/api-env.js';
 import { createIdentityService } from './composition.js';
 import { identitySessionStore } from './composition.js';
+import { allowsInMemorySessionStore, hasSessionStoreConfigured } from './composition.js';
 import type { SessionBindingEnv } from '../../shared/auth/session.js';
 import { requireActorSync } from '../../shared/auth/session.js';
 
@@ -136,6 +137,18 @@ authRoutes.post('/v1/auth/register', async (c) => {
     if (error instanceof AppError) {
       throw error;
     }
+    // Sanitized diagnostic: which store shape handled this request and
+    // how it failed. Stage was logged by IdentityService; here we record
+    // the environment shape only. No credentials or connection details.
+    console.error(
+      '[auth] register 503',
+      JSON.stringify({
+        appEnv: env.APP_ENV ?? 'unset',
+        inMemoryStore: allowsInMemorySessionStore(env.APP_ENV ?? ''),
+        sessionStoreConfigured: hasSessionStoreConfigured(env),
+        name: error instanceof Error ? error.name : typeof error,
+      }),
+    );
     // Persistence failure -> 503 DEPENDENCY_FAILED (P16)
     throw new AppError(
       'DEPENDENCY_FAILED',
@@ -238,10 +251,13 @@ authRoutes.post('/v1/auth/login', async (c) => {
     if (error instanceof AppError) {
       throw error;
     }
-    // Uniform failure - no details (P7)
+    // Persistence failure -> 503 DEPENDENCY_FAILED (P16). A bad
+    // credential is an `AppError` (uniform 401, no details) and is
+    // rethrown above; a store that cannot answer must never be reported
+    // to the user as an invalid username or password.
     throw new AppError(
-      'UNAUTHENTICATED',
-      'Invalid username or password.',
+      'DEPENDENCY_FAILED',
+      'Login failed due to a server error.',
     );
   }
 });

@@ -1,4 +1,4 @@
-import { Pool, PoolClient } from 'pg';
+import { createHash } from 'node:crypto';
 import type { SessionStore } from '../application/session-store.js';
 import type { SessionRecord } from '../domain/session.js';
 import { verifyPassword } from './password.js';
@@ -11,6 +11,37 @@ import { verifyPassword } from './password.js';
  * All credentials are stored as digests (SHA-256 hex); plaintext credentials
  * never enter the database. The store handles all hashing internally.
  */
+/**
+ * The connection surface this store uses from its injected database.
+ *
+ * It is deliberately structural rather than a `pg.Pool` type: a Worker
+ * isolate must not hold a client idle across requests (see
+ * `createSessionStoreConnection` in the identity composition), so the
+ * runtime path supplies a per-operation connection instead of a pool.
+ * Both shapes satisfy this contract, and the injected-`Pool` seam used by
+ * the test and proof suites passes one straight through.
+ *
+ * Rows are untyped for the same reason `pg` leaves them untyped: this
+ * store maps each result itself.
+ */
+export type SessionStoreConnection = {
+  query(
+    sql: string,
+    params?: readonly unknown[],
+  ): Promise<{ rows: any[]; rowCount?: number | null }>;
+  connect(): Promise<SessionStoreTransactionClient>;
+  end(): Promise<void>;
+};
+
+/** A checked-out connection for a transaction; `release` closes it. */
+export type SessionStoreTransactionClient = {
+  query(
+    sql: string,
+    params?: readonly unknown[],
+  ): Promise<{ rows: any[]; rowCount?: number | null }>;
+  release(): void;
+};
+
 export class PostgresSessionStore implements SessionStore {
   /**
    * Session rows are always read together with their owning account so the
@@ -27,11 +58,11 @@ export class PostgresSessionStore implements SessionStore {
     JOIN identity_accounts a ON a.id = s.actor_id
   `;
 
-  private readonly pool: Pool;
+  private readonly pool: SessionStoreConnection;
   private readonly hashFn: (credential: string) => string;
 
   constructor(
-    pool: Pool,
+    pool: SessionStoreConnection,
     hashFn: (credential: string) => string,
   ) {
     this.pool = pool;
@@ -634,7 +665,6 @@ export class PostgresSessionStore implements SessionStore {
   } | null> {
     const account = await this.findAccountByNormalizedUsername(usernameNormalized);
     if (!account) return null;
-
     const valid = await verifyPassword(password, account.passwordHash);
     if (!valid) return null;
 
@@ -671,13 +701,15 @@ export function createCredentialHasher(): (credential: string) => Promise<string
 
 /**
  * Synchronous version of createCredentialHasher for test compatibility.
- * Note: In production (Workers), use the async version.
+ *
+ * `node:crypto` is imported rather than reached for through a bare
+ * `require('crypto')`: this function runs on the deployed-Worker path now
+ * that Identity resolves its store from the Hyperdrive binding, and a
+ * bare `require` is undefined in ESM module contexts. Under `nodejs_compat`
+ * the specifier resolves in the Worker bundle exactly as `pg`'s own Node
+ * built-ins do.
  */
 export function createCredentialHasherSync(): (credential: string) => string {
-  return (credential: string): string => {
-    // Synchronous fallback using Node's crypto module
-    // In Workers, this would need to be async
-    const crypto = require('crypto');
-    return crypto.createHash('sha256').update(credential).digest('hex');
-  };
+  return (credential: string): string =>
+    createHash('sha256').update(credential).digest('hex');
 }

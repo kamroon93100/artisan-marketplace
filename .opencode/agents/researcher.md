@@ -1,5 +1,6 @@
 ﻿---
 description: Researches the repository, installed skills, documentation, and external references without changing project files.
+steps: 8
 mode: subagent
 permission:
   read:

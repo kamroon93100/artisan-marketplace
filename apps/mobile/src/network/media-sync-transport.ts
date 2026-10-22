@@ -7,6 +7,7 @@ import type {
   UploadAuthorizationResponse,
 } from '../sync/media-sync-contract';
 import { getApiBaseUrl } from '../config/api';
+import { authorizationHeaders } from './authorization';
 import { MediaSyncTransportError } from '../sync/media-sync-contract';
 
 type Json = Record<string, unknown>;
@@ -51,6 +52,7 @@ export class HttpMediaSyncTransport
         {
           method: 'POST',
           headers: {
+            ...(await authorizationHeaders()),
             ...(body === undefined
               ? {}
               : {

@@ -2,6 +2,7 @@ import { requireActor, requireActorSync } from '../../shared/auth/session.js';
 import { AppError } from '../../shared/errors/app-error.js';
 import { IdentityService } from './application/identity-service.js';
 import { InMemorySessionStore } from './infrastructure/in-memory-session-store.js';
+import { TestSessionStore } from './infrastructure/test-session-store.js';
 import {
   getIdentityService,
   identitySessionStore,
@@ -1121,6 +1122,81 @@ function testAsyncMethodsExist(): void {
   );
 }
 
+/**
+ * Regression test for refresh username fix.
+ * Verifies that refreshAsync returns the correct username from the account store
+ * instead of falling back to actorId or empty string.
+ */
+async function testRefreshReturnsCorrectUsername(): Promise<void> {
+  const clock = testClock(BASE_TIME);
+  const store = new TestSessionStore();
+  const service = new IdentityService(store, clock.now);
+
+  // Create an account with a specific username
+  const actorId = 'actor-username-test';
+  const username = 'testartisan';
+  const normalizedUsername = username.toLowerCase();
+  const passwordHash = await import('./infrastructure/password.js').then(m => m.hashPassword('validpassword123'));
+  const issuedAt = clock.now();
+
+  await store.createAccount({
+    id: actorId,
+    username,
+    usernameNormalized: normalizedUsername,
+    passwordHash,
+    roles: ['ARTISAN'],
+    createdAt: issuedAt,
+    updatedAt: issuedAt,
+  });
+
+  // Establish a session using establishAsync (which uses the account)
+  const established = await service.establishAsync({
+    actorId,
+    roles: ['ARTISAN'],
+  });
+
+  // Verify the established session has the correct username
+  assertEqual(
+    established.actor.username,
+    username,
+    'established session has correct username',
+  );
+
+  // Perform a refresh using refreshAsync
+  const refreshResult = await service.refreshAsync(established.refreshToken);
+
+  if (!refreshResult.ok) {
+    throw new Error('refreshAsync should succeed with valid credential');
+  }
+
+  // Verify the refreshed session has the correct username (not actorId, not empty)
+  assertEqual(
+    refreshResult.session.actor.username,
+    username,
+    'refreshed session has correct username from account store',
+  );
+  assertEqual(
+    refreshResult.session.actor.username === actorId,
+    false,
+    'refreshed session username is not actorId',
+  );
+  assertEqual(
+    refreshResult.session.actor.username === '',
+    false,
+    'refreshed session username is not empty',
+  );
+  assertEqual(
+    refreshResult.session.actor.actorId,
+    actorId,
+    'refreshed session actorId is correct',
+  );
+  assertEqual(
+    refreshResult.session.actor.roles.join(','),
+    'ARTISAN',
+    'refreshed session roles are correct',
+  );
+}
+
 async function main(): Promise<void> {
   testApprovedCredentialFormatAndLifetimes();
   testTwoDistinctCredentialsResolveTwoDistinctActors();
@@ -1136,6 +1212,7 @@ async function main(): Promise<void> {
   testCredentialsNeverAppearInErrorsOrLogs();
   testAsyncMethodsExist();
   testDurableRefreshGrants();
+  await testRefreshReturnsCorrectUsername();
 
   console.log('IDENTITY PHASE 1A TESTS PASSED');
 }

@@ -1,8 +1,11 @@
+import { router } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useEffect, useState } from 'react';
 
 import { Colors, Spacing } from '@/constants/theme';
 import { CreateProductScreen } from '@/features/capture/CreateProductScreen';
+import { useAuth } from '@/features/auth/session-provider';
+import { inquiryHistoryAction } from '@/features/inquiry/inquiry-navigation';
 import {
   createLocalProductDraft,
   listLocalProductDrafts,
@@ -14,6 +17,9 @@ export default function HomeScreen() {
     useState<LocalProductDraft | null>(null);
   const [creating, setCreating] = useState(false);
   const [active, setActive] = useState(false);
+  const { state, signOut } = useAuth();
+  const [signingOut, setSigningOut] = useState(false);
+  const questions = inquiryHistoryAction();
 
   async function loadLatest(): Promise<void> {
     const drafts = await listLocalProductDrafts();
@@ -33,6 +39,16 @@ export default function HomeScreen() {
       setActive(true);
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function confirmSignOut(): Promise<void> {
+    setSigningOut(true);
+
+    try {
+      await signOut();
+    } finally {
+      setSigningOut(false);
     }
   }
 
@@ -56,17 +72,46 @@ export default function HomeScreen() {
           Make a product draft.
         </Text>
         <Text style={styles.subtitle}>
-          Take one photo. Record your description. We’ll save
+          Take one photo. Record your description. Weï¿½ll save
           the work on this phone first.
         </Text>
       </View>
+
+      <View style={styles.account}>
+        <View style={styles.accountCopy}>
+          <Text style={styles.accountLabel}>SIGNED IN AS</Text>
+          <Text style={styles.accountName}>
+            {state.session?.username ?? 'Not signed in'}
+          </Text>
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          disabled={signingOut}
+          onPress={() => void confirmSignOut()}
+          style={styles.signOut}>
+          <Text style={styles.signOutText}>
+            {signingOut ? 'Signing outâ€¦' : 'Sign out'}
+          </Text>
+        </Pressable>
+      </View>
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={questions.accessibilityLabel}
+        onPress={() => router.push(questions.href)}
+        style={({ pressed }) => [styles.questions, pressed && styles.pressed]}>
+        <View style={styles.questionsCopy}>
+          <Text style={styles.questionsTitle}>{questions.title}</Text>
+          <Text style={styles.questionsText}>{questions.subtitle}</Text>
+        </View>
+      </Pressable>
 
       <Pressable
         disabled={creating}
         onPress={() => void startCreate()}
         style={styles.primary}>
         <Text style={styles.primaryText}>
-          {creating ? 'Creating…' : 'Create Product'}
+          {creating ? 'Creatingï¿½' : 'Create Product'}
         </Text>
       </Pressable>
 
@@ -90,6 +135,30 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  account: {
+    alignItems: 'center',
+    borderColor: Colors.light.backgroundSelected,
+    borderRadius: Spacing.three,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: Spacing.three,
+  },
+  accountCopy: {
+    flex: 1,
+    gap: Spacing.one,
+  },
+  accountLabel: {
+    color: Colors.light.textSecondary,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+  },
+  accountName: {
+    color: Colors.light.text,
+    fontSize: 16,
+    fontWeight: '700',
+  },
   arrow: {
     color: Colors.light.text,
     fontSize: 22,
@@ -143,6 +212,41 @@ const styles = StyleSheet.create({
     color: Colors.light.background,
     fontSize: 17,
     fontWeight: '800',
+  },
+  pressed: {
+    opacity: 0.7,
+  },
+  questions: {
+    alignItems: 'center',
+    borderColor: Colors.light.backgroundSelected,
+    borderRadius: Spacing.three,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: Spacing.three,
+  },
+  questionsCopy: {
+    flex: 1,
+    gap: Spacing.one,
+  },
+  questionsText: {
+    color: Colors.light.textSecondary,
+    fontSize: 13,
+  },
+  questionsTitle: {
+    color: Colors.light.text,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  signOut: {
+    borderRadius: Spacing.three,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+  },
+  signOutText: {
+    color: Colors.light.text,
+    fontSize: 14,
+    fontWeight: '700',
   },
   subtitle: {
     color: Colors.light.textSecondary,
