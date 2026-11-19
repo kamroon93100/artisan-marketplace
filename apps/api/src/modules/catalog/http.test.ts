@@ -1,5 +1,10 @@
 import app from '../../index.js';
 
+// This file's HTTP fixtures cannot pass a build mode through `app.request`.
+// The suite-scoped development build matches the happy-path environment
+// below; production call sites still omit the seam.
+process.env.NODE_ENV = 'development';
+
 /**
  * Catalog routes must refuse requests that cannot prove an identity.
  *
@@ -98,6 +103,7 @@ async function main(): Promise<void> {
 
   const env = {
     APP_ENV: 'development',
+    LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
     DEV_OWNER_ID: '00000000-0000-4000-8000-000000000001',
   };
 

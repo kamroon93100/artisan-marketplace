@@ -14,6 +14,11 @@ import {
   resolveIdentityConnection,
 } from './composition.js';
 
+// Route-level fixtures cannot pass a build mode through `app.request`.
+// This focused file runs in the test build; unit-level assertions below pass
+// explicit modes so production selection never depends on this value.
+process.env.NODE_ENV = 'test';
+
 /**
  * M8 §10 Phase 1 — the request environment must be able to obtain the
  * PostgreSQL-backed session store through the binding a deployed Worker
@@ -129,13 +134,13 @@ async function expectAppError(
  * from `HYPERDRIVE` instead of returning `null`.
  */
 async function testProductionShapeObtainsASessionStore(): Promise<void> {
-  if (allowsInMemorySessionStore(PRODUCTION_SHAPED.APP_ENV)) {
+  if (allowsInMemorySessionStore(PRODUCTION_SHAPED, 'production')) {
     throw new Error(
       'Precondition failed: production must not admit the in-memory session store.',
     );
   }
 
-  const identity = createIdentityService(PRODUCTION_SHAPED);
+  const identity = createIdentityService(PRODUCTION_SHAPED, 'production');
 
   if (identity === null) {
     throw new Error(
@@ -144,7 +149,10 @@ async function testProductionShapeObtainsASessionStore(): Promise<void> {
   }
 
   // A deployment with no database at all keeps the closed failure.
-  const unconfigured = createIdentityService({ APP_ENV: 'production' });
+  const unconfigured = createIdentityService(
+    { APP_ENV: 'production' },
+    'production',
+  );
 
   if (unconfigured !== null) {
     throw new Error(
@@ -162,28 +170,28 @@ async function testProductionShapeObtainsASessionStore(): Promise<void> {
 async function testBoundary401WhenTheDeploymentCanVerify(): Promise<void> {
   await expectAppError(
     'no credential with HYPERDRIVE configured is 401 UNAUTHENTICATED',
-    () => requireActor(PRODUCTION_SHAPED, undefined),
+    () => requireActor(PRODUCTION_SHAPED, undefined, 'production'),
     'UNAUTHENTICATED',
     'A valid session is required.',
   );
 
   await expectAppError(
     'the synchronous boundary agrees',
-    () => requireActorSync(PRODUCTION_SHAPED, undefined),
+    () => requireActorSync(PRODUCTION_SHAPED, undefined, 'production'),
     'UNAUTHENTICATED',
     'A valid session is required.',
   );
 
   await expectAppError(
     'a deployment with no database still fails closed',
-    () => requireActor({ APP_ENV: 'production' }, undefined),
+    () => requireActor({ APP_ENV: 'production' }, undefined, 'production'),
     'DEPENDENCY_FAILED',
     'Session verification is not configured.',
   );
 
   await expectAppError(
     'the development/test contract with nothing configured still fails closed',
-    () => requireActor({ APP_ENV: 'test' }, undefined),
+    () => requireActor({ APP_ENV: 'test' }, undefined, 'test'),
     'DEPENDENCY_FAILED',
     'Session verification is not configured.',
   );
@@ -244,10 +252,12 @@ async function testDevelopmentSeamIsUnchanged(): Promise<void> {
   const actor = await requireActor(
     {
       APP_ENV: 'development',
+      LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
       DEV_OWNER_ID: 'dev-artisan',
       HYPERDRIVE: PRODUCTION_SHAPED.HYPERDRIVE,
     },
     undefined,
+    'development',
   );
 
   if (actor.actorId !== 'dev-artisan' || actor.authenticated !== true) {
@@ -363,6 +373,134 @@ async function testConnectionResolution(): Promise<void> {
 }
 
 /**
+ * Process-local session storage is allowed only under the shared policy.
+ * The same explicit build-mode seam used by the policy is passed here, so
+ * these assertions never depend on the host `NODE_ENV`.
+ */
+async function testInMemorySessionStoreRequiresSharedPolicy(): Promise<void> {
+  const localDevelopment = {
+    APP_ENV: 'development',
+    LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+  } as const;
+  const localTest = {
+    APP_ENV: 'test',
+    LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+  } as const;
+
+  if (!allowsInMemorySessionStore(localDevelopment, 'development')) {
+    throw new Error(
+      'A matching development environment and build mode with opt-in must allow the in-memory store.',
+    );
+  }
+
+  if (!allowsInMemorySessionStore(localTest, 'test')) {
+    throw new Error(
+      'A matching test environment and build mode with opt-in must allow the in-memory store.',
+    );
+  }
+
+  for (const { label, env, buildMode } of [
+    {
+      label: 'development without opt-in',
+      env: { APP_ENV: 'development' },
+      buildMode: 'development',
+    },
+    {
+      label: 'test without opt-in',
+      env: { APP_ENV: 'test' },
+      buildMode: 'test',
+    },
+    {
+      label: 'missing APP_ENV',
+      env: { LOCAL_IN_MEMORY_AUTH_ENABLED: 'true' },
+      buildMode: 'test',
+    },
+    {
+      label: 'unknown APP_ENV',
+      env: {
+        APP_ENV: 'staging',
+        LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+      },
+      buildMode: 'development',
+    },
+    {
+      label: 'mismatched build mode',
+      env: localDevelopment,
+      buildMode: 'test',
+    },
+    {
+      label: 'unknown build mode',
+      env: localDevelopment,
+      buildMode: 'staging',
+    },
+    {
+      label: 'production build with misleading local configuration',
+      env: localDevelopment,
+      buildMode: 'production',
+    },
+  ]) {
+    if (allowsInMemorySessionStore(env, buildMode)) {
+      throw new Error(
+        `${label} must not allow process-local session storage.`,
+      );
+    }
+  }
+
+  const firstLocal = createIdentityService(localDevelopment, 'development');
+  const secondLocal = createIdentityService(localDevelopment, 'development');
+
+  if (firstLocal === null || firstLocal !== secondLocal) {
+    throw new Error(
+      'A policy-approved local configuration must select the in-memory identity service singleton.',
+    );
+  }
+
+  const misleadingProduction = {
+    APP_ENV: 'development',
+    LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+    HYPERDRIVE: PRODUCTION_SHAPED.HYPERDRIVE,
+  } as const;
+
+  if (allowsInMemorySessionStore(misleadingProduction, 'production')) {
+    throw new Error(
+      'A production build must reject misleading local configuration.',
+    );
+  }
+
+  const durableFirst = createIdentityService(
+    misleadingProduction,
+    'production',
+  );
+  const durableSecond = createIdentityService(
+    misleadingProduction,
+    'production',
+  );
+
+  if (durableFirst === null) {
+    throw new Error(
+      'A production build with HYPERDRIVE must select the PostgreSQL-backed identity service.',
+    );
+  }
+
+  if (durableFirst === durableSecond) {
+    throw new Error(
+      'A production build must not select the process-local identity singleton.',
+    );
+  }
+
+  if (
+    createIdentityService(
+      { APP_ENV: 'production' },
+      'production',
+    ) !== null
+  ) {
+    throw new Error(
+      'Missing production persistence configuration must remain fail-closed.',
+    );
+  }
+}
+
+/**
  * A configured store that cannot answer is a dependency failure, not an
  * authentication failure and not an unexpected 500: the deployment can
  * verify a session, it just cannot reach the database right now. The same
@@ -373,7 +511,12 @@ async function testConnectionResolution(): Promise<void> {
 async function testStoreOutageFailsClosedAsDependencyFailure(): Promise<void> {
   await expectAppError(
     'an unreachable session store at the boundary is DEPENDENCY_FAILED',
-    () => requireActor(STORE_DOWN, bearer('not-a-real-credential')),
+    () =>
+      requireActor(
+        STORE_DOWN,
+        bearer('not-a-real-credential'),
+        'production',
+      ),
     'DEPENDENCY_FAILED',
     'Session verification is temporarily unavailable.',
   );
@@ -384,7 +527,12 @@ async function testStoreOutageFailsClosedAsDependencyFailure(): Promise<void> {
   // refusal is not about this particular credential.
   await expectAppError(
     'the synchronous boundary refuses durable storage explicitly',
-    () => requireActorSync(STORE_DOWN, bearer('not-a-real-credential')),
+    () =>
+      requireActorSync(
+        STORE_DOWN,
+        bearer('not-a-real-credential'),
+        'production',
+      ),
     'DEPENDENCY_FAILED',
     'Synchronous session verification is not available for durable session storage.',
   );
@@ -443,7 +591,10 @@ async function testLoginCredentialFailureStays401AtTheRoute(): Promise<void> {
         password: 'not-the-right-password',
       }),
     },
-    { APP_ENV: 'test' },
+    {
+      APP_ENV: 'test',
+      LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+    },
   );
 
   if (response.status !== 401) {
@@ -478,6 +629,7 @@ async function testLoginCredentialFailureStays401AtTheRoute(): Promise<void> {
 async function main(): Promise<void> {
   await testProductionShapeObtainsASessionStore();
   await testConnectionResolution();
+  await testInMemorySessionStoreRequiresSharedPolicy();
   await testBoundary401WhenTheDeploymentCanVerify();
   await testHttp401WhenTheDeploymentCanVerify();
   await testDevelopmentSeamIsUnchanged();

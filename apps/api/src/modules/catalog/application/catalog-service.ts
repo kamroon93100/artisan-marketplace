@@ -154,6 +154,16 @@ export class CatalogService {
     return this.repository.createDraft(input);
   }
 
+  /**
+   * An unscoped read of a product record.
+   *
+   * This is deliberately not the artisan-facing read: it is the lookup the
+   * module's own ownership checks, the review surface, and the AI pipeline
+   * use after they have established authorization for the product. An HTTP
+   * handler must not call it with an id the client supplied, because that
+   * would expose one artisan's draft to another; use
+   * `getOwnedById` at the boundary.
+   */
   async getById(id: string): Promise<CatalogProduct> {
     const product = await this.repository.getById(id);
 
@@ -166,6 +176,21 @@ export class CatalogService {
     }
 
     return product;
+  }
+
+  /**
+   * The product as its owning artisan sees it.
+   *
+   * Drafts are private working state, not catalog data: only their owner
+   * may read them before publication. Ownership is derived from the stored
+   * record, so a caller cannot widen the read by asserting anything in the
+   * request.
+   */
+  async getOwnedById(
+    id: string,
+    actorId: string,
+  ): Promise<CatalogProduct> {
+    return this.requireOwnedProduct(id, actorId);
   }
 
   /**

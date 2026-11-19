@@ -9,6 +9,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { File, Paths } from 'expo-file-system';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Colors, Spacing } from '@/constants/theme';
 import {
@@ -27,12 +28,14 @@ import {
 } from '@/storage/sync-operations';
 
 import { DraftStatus } from './DraftStatus';
+import { createDraftSyncRunner } from './draft-sync';
 import { ReviewProductScreen } from '../review/ReviewProductScreen';
 import { syncPendingMedia } from '@/sync/media-sync';
 import { syncPendingProducts } from '@/sync/product-sync';
 import { HttpProductSyncTransport } from
   '@/network/product-sync-transport';
 import { HttpMediaSyncTransport } from '@/network/media-sync-transport';
+import { HttpAiJobEnqueueTransport } from '@/network/ai-job-enqueue-transport';
 import { ExpoFileByteUploader } from '@/network/expo-file-byte-uploader';
 import { ExpoFileSizeProbe } from '@/network/expo-file-size-probe';
 import { PhotoCapture } from './PhotoCapture';
@@ -40,6 +43,8 @@ import { VoiceRecorder } from './VoiceRecorder';
 
 type Props = {
   draftId: string;
+  /** The authenticated artisan who owns the draft and its queued work. */
+  ownerId: string;
   onBack: () => void;
 };
 
@@ -50,8 +55,10 @@ type UploadProgressMap = Record<
 
 export function CreateProductScreen({
   draftId,
+  ownerId,
   onBack,
 }: Props) {
+  const safeAreaInsets = useSafeAreaInsets();
   const [draft, setDraft] =
     useState<LocalProductDraft | null>(null);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
@@ -77,14 +84,17 @@ export function CreateProductScreen({
   const refresh = useCallback(async (): Promise<void> => {
     const [nextDraft, media] =
       await Promise.all([
-        getLocalProductDraft(draftId),
-        listLocalMediaIntents(draftId),
+        getLocalProductDraft(ownerId, draftId),
+        listLocalMediaIntents(ownerId, draftId),
       ]);
 
     const operations = (
       await Promise.all(
         media.map((item) =>
-          listSyncOperationsForAggregate(item.localId),
+          listSyncOperationsForAggregate(
+            ownerId,
+            item.localId,
+          ),
         ),
       )
     ).flat();
@@ -104,11 +114,67 @@ export function CreateProductScreen({
         (item) => item.state === 'ACTION_REQUIRED',
       ),
     );
-  }, [draftId]);
+  }, [draftId, ownerId]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  const runDraftSync = useMemo(
+    () =>
+      createDraftSyncRunner({
+        listMedia: () =>
+          listLocalMediaIntents(ownerId, draftId),
+        listOperations: (localId) =>
+          listSyncOperationsForAggregate(ownerId, localId),
+        retryOperation: (operationId) =>
+          retrySyncOperation(ownerId, operationId),
+        syncProducts: () =>
+          syncPendingProducts(
+            ownerId,
+            new HttpProductSyncTransport(),
+          ),
+        getDraft: async () => {
+          const draft = await getLocalProductDraft(ownerId, draftId);
+          return draft
+            ? { localId: draft.localId, remoteProductId: draft.remoteProductId }
+            : null;
+        },
+        syncMedia: (onProgress) =>
+          syncPendingMedia(
+            ownerId,
+            new HttpMediaSyncTransport(),
+            new ExpoFileByteUploader(),
+            10,
+            onProgress,
+            undefined,
+            new ExpoFileSizeProbe(),
+          ),
+        enqueueAiJob: async (productId, mediaRefs, idempotencyKey) => {
+          await new HttpAiJobEnqueueTransport().enqueue(
+            productId,
+            { media: mediaRefs },
+            idempotencyKey,
+          );
+        },
+        refresh,
+        onWorkingChange: setWorking,
+        onProgress: (localId, progress) => {
+          setUploadProgress((current) => ({
+            ...current,
+            [localId]: progress,
+          }));
+        },
+      }),
+    [draftId, ownerId, refresh],
+  );
+
+  function startDraftSync(mode: 'sync' | 'retry'): void {
+    // The runner refreshes persisted state before rethrowing a sync error,
+    // so the screen must not also produce an unhandled rejection.
+    void runDraftSync(mode).catch(() => undefined);
+  }
+
   async function savePhoto(
     asset: ImagePicker.ImagePickerAsset,
   ): Promise<void> {
@@ -126,7 +192,7 @@ export function CreateProductScreen({
       const source = new File(asset.uri);
       source.copy(destination);
 
-      await createLocalMediaIntent({
+      await createLocalMediaIntent(ownerId, {
         localId,
         productId: draftId,
         kind: 'IMAGE',
@@ -144,7 +210,7 @@ export function CreateProductScreen({
         idempotencyKey: `media:${localId}:image`,
       });
 
-      await updateLocalProductDraft(draftId, {
+      await updateLocalProductDraft(ownerId, draftId, {
         state: 'PENDING_SYNC',
       });
 
@@ -162,7 +228,7 @@ export function CreateProductScreen({
 
       const file = new File(uri);
 
-      await createLocalMediaIntent({
+      await createLocalMediaIntent(ownerId, {
         localId,
         productId: draftId,
         kind: 'AUDIO',
@@ -172,7 +238,7 @@ export function CreateProductScreen({
         idempotencyKey: `media:${localId}:audio`,
       });
 
-      await updateLocalProductDraft(draftId, {
+      await updateLocalProductDraft(ownerId, draftId, {
         state: 'PENDING_SYNC',
       });
 
@@ -204,7 +270,10 @@ export function CreateProductScreen({
 
   return (
     <ScrollView
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[
+        styles.content,
+        { paddingTop: safeAreaInsets.top + Spacing.two },
+      ]}
       showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
         <Pressable onPress={onBack}>
@@ -278,39 +347,8 @@ export function CreateProductScreen({
 
 
       <Pressable
-        onPress={async () => {
-          setWorking(true);
-
-          try {
-            await syncPendingProducts(
-              new HttpProductSyncTransport(),
-            );
-
-            const syncedDraft =
-              await getLocalProductDraft(draftId);
-
-            if (!syncedDraft?.remoteProductId) {
-              await refresh();
-              return;
-            }
-
-            await syncPendingMedia(
-              new HttpMediaSyncTransport(),
-              new ExpoFileByteUploader(),
-              10,
-              (localId, progress) => {
-                setUploadProgress((current) => ({
-                  ...current,
-                  [localId]: progress,
-                }));
-              },
-              undefined,
-              new ExpoFileSizeProbe(),
-            );
-            await refresh();
-          } finally {
-            setWorking(false);
-          }
+        onPress={() => {
+          startDraftSync('sync');
         }}
         disabled={working}
         style={styles.devButton}>
@@ -323,14 +361,17 @@ export function CreateProductScreen({
         <Pressable
           onPress={async () => {
             const media =
-              await listLocalMediaIntents(draftId);
+              await listLocalMediaIntents(ownerId, draftId);
 
             const mediaItem =
               media.find((item) => item.kind === 'IMAGE') ??
               media.find((item) => item.kind === 'AUDIO');
 
             const operations = mediaItem
-              ? await listSyncOperationsForAggregate(mediaItem.localId)
+              ? await listSyncOperationsForAggregate(
+                  ownerId,
+                  mediaItem.localId,
+                )
               : [];
             const operation = operations.find(
               (item) => item.aggregateId === mediaItem?.localId,
@@ -338,6 +379,7 @@ export function CreateProductScreen({
 
             if (mediaItem && operation) {
               await markSyncActionRequired(
+                ownerId,
                 mediaItem.localId,
                 operation.operationId,
                 'SIMULATED_FAILURE',
@@ -362,25 +404,10 @@ export function CreateProductScreen({
             A sync operation needs another attempt.
           </Text>
           <Pressable
-            onPress={async () => {
-              const media = await listLocalMediaIntents(draftId);
-              const operations = (
-                await Promise.all(
-                  media.map((item) =>
-                    listSyncOperationsForAggregate(item.localId),
-                  ),
-                )
-              ).flat();
-
-              const operation = operations.find(
-                (item) => item.state === 'ACTION_REQUIRED',
-              );
-
-              if (operation) {
-                await retrySyncOperation(operation.operationId);
-                await refresh();
-              }
+            onPress={() => {
+              startDraftSync('retry');
             }}
+            disabled={working}
             style={styles.retry}>
             <Text style={styles.retryText}>Retry</Text>
           </Pressable>

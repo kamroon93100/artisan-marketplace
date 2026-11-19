@@ -1,6 +1,11 @@
 import type { GetProductReviewResponse } from '@artisan-marketplace/contracts';
 import app from '../../index.js';
 
+// This file's HTTP fixtures cannot pass a build mode through `app.request`.
+// The suite-scoped development build matches `devEnv` below; production
+// call sites still omit the seam.
+process.env.NODE_ENV = 'development';
+
 const OWNER = '00000000-0000-4000-8000-0000000000b1';
 const STRANGER = '00000000-0000-4000-8000-0000000000c9';
 const PRODUCT = '00000000-0000-4000-8000-0000000000b2';
@@ -8,6 +13,7 @@ const PRODUCT = '00000000-0000-4000-8000-0000000000b2';
 function devEnv(actorId: string): Record<string, string> {
   return {
     APP_ENV: 'development',
+    LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
     DEV_OWNER_ID: actorId,
   };
 }

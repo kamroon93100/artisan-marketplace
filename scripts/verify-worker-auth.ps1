@@ -1,7 +1,8 @@
 $ErrorActionPreference = "Stop"
 
 # Real-runtime auth path proof (workerd via `wrangler dev`) against the
-# guarded project PostgreSQL (Hyperdrive localConnectionString, port 55432).
+# guarded project PostgreSQL (CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE,
+# port 55432).
 #
 # Acceptance (Phase 1, MVP execution day):
 #   0  durable shape: health reports APP_ENV outside development/test, so
@@ -31,7 +32,6 @@ $ErrorActionPreference = "Stop"
 $root = "C:\Users\kgurd\Projects\artisan-marketplace"
 $api = Join-Path $root "apps\api"
 $wrangler = Join-Path $api "node_modules\.bin\wrangler.cmd"
-$wranglerConfig = Join-Path $api "wrangler.jsonc"
 $port = 8899
 $base = "http://127.0.0.1:$port"
 $outLog = Join-Path $env:TEMP "opencode\wauth.out.log"
@@ -140,10 +140,11 @@ function Get-Session([string] $jsonText) {
 }
 
 # --- guarded project database (same scope assertions as the M8 proofs) ------
-$cfg = (Get-Content -LiteralPath $wranglerConfig |
-  Where-Object { $_.Trim() -notlike "//*" } | Out-String | ConvertFrom-Json)
-$cs = [System.Uri]$cfg.hyperdrive[0].localConnectionString.Trim()
-if (-not $cs) { throw "No Hyperdrive localConnectionString found in $wranglerConfig" }
+# The local connection string comes from the documented Hyperdrive environment
+# variable; the credential is never committed here.
+. (Join-Path $root "scripts\lib\hyperdrive-local-connection.ps1")
+$localConnectionString = Get-HyperdriveLocalConnectionString
+$cs = [System.Uri]$localConnectionString
 if ($cs.Port -ne $expectedPort) {
   throw "Refusing to run: expected port $expectedPort but the binding targets $($cs.Port). The instance on 5432 is not this project."
 }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { AppError } from '../../shared/errors/app-error.js';
 import { getCatalogService } from '../catalog/composition.js';
-import { getAiRepository } from '../ai/composition.js';
+import { getAiRepository, selectAiProvider } from '../ai/composition.js';
 import { CatalogService } from '../catalog/application/catalog-service.js';
 import { InMemoryCatalogRepository } from '../catalog/infrastructure/in-memory-catalog-repository.js';
 import { getReviewService } from './composition.js';
@@ -136,7 +136,7 @@ async function syncedProduct(
  */
 async function testUnconfiguredAiFallsBackAndApprovalStillWorks(): Promise<void> {
   const refusal = captureThrown(() =>
-    getAiRepository(UNCONFIGURED_AI),
+    selectAiProvider(UNCONFIGURED_AI),
   );
 
   assert.ok(

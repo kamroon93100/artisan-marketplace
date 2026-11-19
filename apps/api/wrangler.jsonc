@@ -1,33 +1,81 @@
 {
-  "name": "artisan-marketplace-api",
-  // The Worker entry is the worker-only shell around the shared app in
-  // `src/index.ts`. It carries the build-time precompiled WebAssembly
-  // imports (Cloudflare forbids runtime wasm code generation); the app
-  // itself stays importable from the Node test suite.
-  "main": "src/worker.ts",
-  "compatibility_date": "2026-09-18",
-  // node-postgres reaches PostgreSQL over Node's TCP and TLS built-ins,
-  // so the PostgreSQL repositories cannot connect without this flag.
-  "compatibility_flags": ["nodejs_compat"],
-  // The Worker reaches PostgreSQL only through a Hyperdrive binding. A
-  // deployed Worker receives the real Hyperdrive configuration; `wrangler
-  // dev` has no Hyperdrive configuration to resolve, so it connects
-  // directly to `localConnectionString` instead. Both shapes deliver the
-  // same binding object to the Worker, so there is one local and one
-  // production code path and no development-only database setting.
-  //
-  // The `id` is the placeholder configuration id and must be replaced
-  // with the deployed Hyperdrive configuration id before any deploy.
-  // The local connection string is a project-local development value
-  // that mirrors infra/docker/local-compose.yml; it is not a production
-  // credential and is never used outside `wrangler dev`.
-  "hyperdrive": [
-    {
-      "binding": "HYPERDRIVE",
-      "id": "00000000000000000000000000000000",
-      "localConnectionString":
-        "postgresql://artisan_marketplace:artisan_marketplace_dev@127.0.0.1:55432/artisan_marketplace_dev"
-    }
-  ],
-  "workers_dev": true
+	"name": "artisan-marketplace-api",
+	// The Worker entry is the worker-only shell around the shared app in
+	// `src/index.ts`. It carries the build-time precompiled WebAssembly
+	// imports (Cloudflare forbids runtime wasm code generation); the app
+	// itself stays importable from the Node test suite.
+	"main": "src/worker.ts",
+	"compatibility_date": "2026-09-18",
+	// node-postgres reaches PostgreSQL over Node's TCP and TLS built-ins,
+	// so the PostgreSQL repositories cannot connect without this flag.
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	// The Worker reaches PostgreSQL only through a Hyperdrive binding. A
+	// deployed Worker receives the real Hyperdrive configuration; `wrangler
+	// dev` reads CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE
+	// from the shell and supplies the same binding object. Both shapes
+	// deliver one binding to the Worker, so there is one local and one
+	// production code path and no committed database credential.
+	//
+	// This ID references the production Neon Hyperdrive configuration.
+	"hyperdrive": [
+		{
+			"binding": "HYPERDRIVE",
+			"id": "934099e222e3407fa7af9e66a211d0ba"
+		}
+	],
+	// Cloudflare Workers AI binding for model inference.
+	// Provides access to models like @cf/meta/llama-3.1-8b-instruct-fast
+	// without requiring an external API key.
+	"ai": {
+		"binding": "AI"
+	},
+	// Cloudflare Queue for AI job dispatch.
+	// Producer binding used by the outbox dispatcher to publish events.
+	// Consumer binding used by the queue consumer to process events.
+	"queues": {
+		"producers": [
+			{
+				"binding": "AI_JOB_QUEUE",
+				"queue": "ai-job-queue"
+			}
+		],
+		"consumers": [
+			{
+				"queue": "ai-job-queue",
+				"max_batch_size": 10,
+				"max_batch_timeout": 5,
+				"max_retries": 3,
+				"dead_letter_queue": "ai-job-queue-dlq"
+			}
+		]
+	},
+	// Cron triggers for scheduled handlers.
+	// The outbox dispatcher runs every minute to publish pending events.
+	"triggers": {
+		"crons": [
+			"* * * * *"
+		]
+	},
+	// Production authentication throttling uses one SQLite-backed Durable
+	// Object per hashed limiter subject. The class is exported by the Worker
+	// entry in `src/worker.ts`; the migration creates its SQLite storage class.
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "AUTH_RATE_LIMITER",
+				"class_name": "AuthRateLimiterDurableObject"
+			}
+		]
+	},
+	"migrations": [
+		{
+			"tag": "v1-auth-rate-limiter",
+			"new_sqlite_classes": [
+				"AuthRateLimiterDurableObject"
+			]
+		}
+	],
+	"workers_dev": true
 }

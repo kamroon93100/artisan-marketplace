@@ -408,9 +408,20 @@ async function testOwnershipIsEnforced(): Promise<void> {
       'reading another artisan’s publish history',
       () => service.listVersions(approved.id, OTHER_ARTISAN),
     ],
+    [
+      'reading another artisan’s draft',
+      () => service.getOwnedById(approved.id, OTHER_ARTISAN),
+    ],
   ] as Array<[string, () => Promise<unknown>]>) {
     await expectAppError(run, 'FORBIDDEN', label);
   }
+
+  const own = await service.getOwnedById(approved.id, OWNER);
+
+  expect(
+    own.id === approved.id,
+    'the owning artisan can still read the product',
+  );
 
   // The refusals above must not have advanced anything.
   const after = await service.getById(approved.id);

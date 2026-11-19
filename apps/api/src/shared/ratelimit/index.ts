@@ -3,7 +3,23 @@ export type {
   RateLimiter,
 } from './rate-limiter.js';
 export { InMemorySlidingWindowRateLimiter } from './in-memory-rate-limiter.js';
-export { rateLimitMiddleware } from './rate-limit-middleware.js';
+export {
+  enforceRateLimit,
+  rateLimitMiddleware,
+} from './rate-limit-middleware.js';
+export {
+  OPERATION_POLICIES,
+  type OperationScope,
+  type OperationPolicy,
+  isOperationScope,
+} from './operation-registry.js';
+export {
+  allowsInMemoryOperationRateLimiters,
+  resolveOperationRateLimiters,
+  buildOperationKey,
+  type OperationRateLimitEnv,
+  type OperationRateLimiters,
+} from './operation-rate-limit.js';
 
 /**
  * Shared singleton rate-limiters for the current local-dev stage.
@@ -14,6 +30,69 @@ export { rateLimitMiddleware } from './rate-limit-middleware.js';
  */
 
 import { InMemorySlidingWindowRateLimiter } from './in-memory-rate-limiter.js';
+
+/**
+ * Authentication throttle policy.
+ *
+ * Login and registration subjects are `(trusted client IP, normalized
+ * username)`. Refresh and logout subjects are `(trusted client IP)` with
+ * separate operation scopes; they deliberately exclude usernames, refresh
+ * credentials, and other attacker-controlled token material. Every operation
+ * has an independent budget, so exhausting one cannot consume another.
+ * Exact values remain an implementation-time security-review item; keeping
+ * them here makes a later review a one-file change.
+ *
+ * These limiters are process-local. They do not provide globally
+ * distributed protection across Worker isolates or restarts. Replacing
+ * them with Cloudflare Rate Limiting or another shared implementation is
+ * the production-hardening step.
+ */
+export const AUTH_RATE_LIMIT_POLICY = {
+  login: {
+    limit: 10,
+    windowMs: 10 * 60_000,
+  },
+  register: {
+    limit: 5,
+    windowMs: 60 * 60_000,
+  },
+  refresh: {
+    limit: 60,
+    windowMs: 10 * 60_000,
+  },
+  logout: {
+    limit: 30,
+    windowMs: 10 * 60_000,
+  },
+} as const;
+
+/** Login: 10 attempts per 10 minutes per IP/normalized username. */
+export const authLoginLimiter =
+  new InMemorySlidingWindowRateLimiter(
+    AUTH_RATE_LIMIT_POLICY.login.limit,
+    AUTH_RATE_LIMIT_POLICY.login.windowMs,
+  );
+
+/** Registration: 5 attempts per 60 minutes per IP/normalized username. */
+export const authRegisterLimiter =
+  new InMemorySlidingWindowRateLimiter(
+    AUTH_RATE_LIMIT_POLICY.register.limit,
+    AUTH_RATE_LIMIT_POLICY.register.windowMs,
+  );
+
+/** Refresh: 60 attempts per 10 minutes per trusted IP. */
+export const authRefreshLimiter =
+  new InMemorySlidingWindowRateLimiter(
+    AUTH_RATE_LIMIT_POLICY.refresh.limit,
+    AUTH_RATE_LIMIT_POLICY.refresh.windowMs,
+  );
+
+/** Logout: 30 attempts per 10 minutes per trusted IP. */
+export const authLogoutLimiter =
+  new InMemorySlidingWindowRateLimiter(
+    AUTH_RATE_LIMIT_POLICY.logout.limit,
+    AUTH_RATE_LIMIT_POLICY.logout.windowMs,
+  );
 
 /** Product creation: 30 requests per 60-second window per key. */
 export const productCreateLimiter =

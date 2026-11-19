@@ -60,6 +60,22 @@ export type RecordAttemptInput = {
   nextAttemptAt: string | null;
 };
 
+/**
+ * Input for atomically completing an attempt and creating a retry outbox event
+ * when the job transitions to RETRYING state. This avoids the failure window
+ * where the job could be in RETRYING state without a corresponding outbox event.
+ */
+export type CompleteAttemptWithRetryOutboxInput = {
+  id: string;
+  expectedState: AiJobState;
+  nextState: AiJobState;
+  attemptCount: number;
+  failure: AiFailure | null;
+  nextAttemptAt: string | null;
+  /** Payload for the retry outbox event (only used when nextState === 'RETRYING') */
+  retryOutboxPayload?: OutboxEventPayload;
+};
+
 export type SaveProposalsInput = {
   job: AiJob;
   attempt: number;
@@ -118,10 +134,64 @@ export class AiProposalDecisionConflictError extends Error {
   }
 }
 
+/**
+ * Payload for the outbox event that the dispatcher publishes to the queue.
+ * Contains everything the consumer needs to re-hydrate actor context and run the job.
+ *
+ * Note: jobId is NOT included here because it's not known at enqueue time.
+ * The repository injects the real jobId when persisting the outbox event
+ * after the job is created in the same transaction.
+ */
+export type OutboxEventPayload = {
+  /** Schema version of the payload for future migrations */
+  payloadVersion: number;
+  /** The product being worked on */
+  productId: string;
+  /** The artisan who owns the job */
+  ownerId: string;
+  /** Correlation ID for tracing */
+  correlationId: string;
+  /** Causation ID for event chaining */
+  causationId: string | null;
+  /** Idempotency key for deduplication */
+  idempotencyKey: string | null;
+  /** Current attempt number (1-based) */
+  attempt: number;
+  /** Maximum attempts allowed */
+  maxAttempts: number;
+};
+
+/**
+ * Result of an atomic job + outbox creation.
+ */
+export type CreateAiJobWithOutboxResult = {
+  job: AiJob;
+  outboxEventId: string;
+  created: boolean;
+};
+
 export interface AiRepository {
   createJob(
     input: CreateAiJobInput,
   ): Promise<CreateAiJobResult>;
+  /**
+   * Atomically creates an AI job and its corresponding outbox event in a single
+   * transaction. This is the primary enqueue path that guarantees no job exists
+   * without its dispatch record (ADR-008).
+   */
+  createJobWithOutbox(
+    input: CreateAiJobInput,
+    outboxPayload: OutboxEventPayload,
+  ): Promise<CreateAiJobWithOutboxResult>;
+  /**
+   * Creates an outbox event for an existing job that is being retried.
+   * Called when a job transitions to RETRYING state so the dispatcher can
+   * re-queue it when nextAttemptAt is due.
+   */
+  createOutboxEventForRetry(
+    job: AiJob,
+    outboxPayload: OutboxEventPayload,
+  ): Promise<string>;
   findJobByIdempotencyKey(
     ownerId: string,
     idempotencyKey: string,
@@ -147,6 +217,20 @@ export interface AiRepository {
    * disagree with the outcome recorded beside it.
    */
   completeAttempt(input: RecordAttemptInput): Promise<AiJob>;
+
+  /**
+   * Atomically completes an attempt and, if the next state is RETRYING,
+   * creates the corresponding retry outbox event in the same transaction.
+   * This eliminates the failure window where a job could be marked RETRYING
+   * without its retry outbox event, or vice versa.
+   *
+   * If nextState is not RETRYING, behaves identically to completeAttempt.
+   * The retryOutboxPayload is required when nextState === 'RETRYING'.
+   */
+  completeAttemptWithRetryOutbox(
+    input: CompleteAttemptWithRetryOutboxInput,
+  ): Promise<AiJob>;
+
   /**
    * Idempotent within one attempt: a repeated save of the same attempt's
    * proposals returns what is already stored rather than duplicating rows.

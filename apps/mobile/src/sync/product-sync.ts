@@ -16,9 +16,10 @@ export type ProductSyncResult = {
 };
 
 export async function syncPendingProducts(
+  ownerId: string,
   transport: ProductSyncTransport,
 ): Promise<ProductSyncResult> {
-  const drafts = await listLocalProductDrafts();
+  const drafts = await listLocalProductDrafts(ownerId);
 
   const result: ProductSyncResult = {
     processed: 0,
@@ -46,13 +47,18 @@ export async function syncPendingProducts(
       });
 
       await setLocalProductRemoteId(
+        ownerId,
         draft.localId,
         response.remoteProductId,
       );
 
-      await updateLocalProductDraft(draft.localId, {
-        state: 'SYNCED',
-      });
+      await updateLocalProductDraft(
+        ownerId,
+        draft.localId,
+        {
+          state: 'SYNCED',
+        },
+      );
 
       result.succeeded += 1;
     } catch (error) {
@@ -66,9 +72,13 @@ export async function syncPendingProducts(
 
       result.actionRequired += 1;
 
-      await updateLocalProductDraft(draft.localId, {
-        state: 'ACTION_REQUIRED',
-      });
+      await updateLocalProductDraft(
+        ownerId,
+        draft.localId,
+        {
+          state: 'ACTION_REQUIRED',
+        },
+      );
     }
   }
 

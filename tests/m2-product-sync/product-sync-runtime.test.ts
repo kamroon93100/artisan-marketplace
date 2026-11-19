@@ -44,16 +44,17 @@ class RetryableTransport implements ProductSyncTransport {
 }
 
 async function main(): Promise<void> {
-  const successDraft = await createLocalProductDraft();
+  const OWNER = "artisan-owner-1";
+  const successDraft = await createLocalProductDraft(OWNER);
 
-  await updateLocalProductDraft(successDraft.localId, {
+  await updateLocalProductDraft(OWNER, successDraft.localId, {
     title: "Handmade basket",
     state: "PENDING_SYNC",
   });
 
   const successTransport = new SuccessTransport();
 
-  const first = await syncPendingProducts(successTransport);
+  const first = await syncPendingProducts(OWNER, successTransport);
 
   assert.equal(first.processed, 1);
   assert.equal(first.succeeded, 1);
@@ -66,6 +67,7 @@ async function main(): Promise<void> {
   );
 
   const syncedDraft = await getLocalProductDraft(
+    OWNER,
     successDraft.localId,
   );
 
@@ -76,22 +78,24 @@ async function main(): Promise<void> {
   );
   assert.equal(syncedDraft.state, "SYNCED");
 
-  const second = await syncPendingProducts(successTransport);
+  const second = await syncPendingProducts(OWNER, successTransport);
 
   assert.equal(second.processed, 0);
   assert.equal(successTransport.calls.length, 1);
 
-  const retryDraft = await createLocalProductDraft();
+  const retryDraft = await createLocalProductDraft(OWNER);
 
-  await updateLocalProductDraft(retryDraft.localId, {
+  await updateLocalProductDraft(OWNER, retryDraft.localId, {
     title: "Retry product",
     state: "PENDING_SYNC",
   });
 
   const retryTransport = new RetryableTransport();
 
-  const retryResult =
-    await syncPendingProducts(retryTransport);
+  const retryResult = await syncPendingProducts(
+    OWNER,
+    retryTransport,
+  );
 
   assert.equal(retryResult.processed, 1);
   assert.equal(retryResult.succeeded, 0);
@@ -99,6 +103,7 @@ async function main(): Promise<void> {
   assert.equal(retryResult.actionRequired, 0);
 
   const pendingDraft = await getLocalProductDraft(
+    OWNER,
     retryDraft.localId,
   );
 

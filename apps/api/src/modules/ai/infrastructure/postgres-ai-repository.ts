@@ -18,9 +18,12 @@ import type {
   AiRepository,
   CreateAiJobInput,
   CreateAiJobResult,
+  CreateAiJobWithOutboxResult,
+  OutboxEventPayload,
   RecordAttemptInput,
   RecordProposalDecisionInput,
   SaveProposalsInput,
+  CompleteAttemptWithRetryOutboxInput,
 } from '../application/ai-repository.js';
 import {
   AiJobStateConflictError,
@@ -362,6 +365,219 @@ export class PostgresAiRepository implements AiRepository {
     );
   }
 
+  async createJobWithOutbox(
+    input: CreateAiJobInput,
+    outboxPayload: OutboxEventPayload,
+  ): Promise<CreateAiJobWithOutboxResult> {
+    const now = new Date().toISOString();
+
+    return this.database.transaction(async (tx) => {
+      // Insert the job
+      const jobRows = await tx.query<JobRow>(
+        `
+          INSERT INTO ai_jobs (
+            id,
+            product_id,
+            owner_id,
+            job_type,
+            state,
+            provider,
+            model,
+            model_version,
+            prompt_version,
+            schema_version,
+            pipeline_version,
+            input,
+            input_hash,
+            attempt_count,
+            max_attempts,
+            correlation_id,
+            causation_id,
+            idempotency_key,
+            created_at,
+            updated_at
+          )
+          VALUES (
+            gen_random_uuid(),
+            $1,
+            $2,
+            $3,
+            'QUEUED',
+            $4,
+            $5,
+            $6,
+            $7,
+            $8,
+            $9,
+            $10::jsonb,
+            $11,
+            0,
+            $12,
+            $13,
+            $14,
+            $15,
+            $16,
+            $16
+          )
+          ON CONFLICT (owner_id, idempotency_key)
+            WHERE idempotency_key IS NOT NULL
+          DO NOTHING
+          RETURNING ${JOB_COLUMNS}
+        `,
+        [
+          input.productId,
+          input.ownerId,
+          input.jobType,
+          input.provider,
+          input.model,
+          input.modelVersion,
+          input.promptVersion,
+          input.schemaVersion,
+          input.pipelineVersion,
+          JSON.stringify(input.input),
+          input.inputHash,
+          input.maxAttempts,
+          input.correlationId,
+          input.causationId,
+          input.idempotencyKey,
+          now,
+        ],
+      );
+
+      if (jobRows[0]) {
+        // Job was created, now insert the outbox event with the real jobId
+        const outboxEventId = crypto.randomUUID();
+
+        // Build the complete payload with the actual jobId
+        const completePayload = {
+          ...outboxPayload,
+          jobId: jobRows[0].id,
+        };
+
+        await tx.query(
+          `
+            INSERT INTO ai_job_outbox (
+              id,
+              job_id,
+              owner_id,
+              payload_version,
+              payload,
+              state,
+              dispatch_attempt,
+              max_dispatch_attempts,
+              created_at,
+              updated_at
+            )
+            VALUES (
+              $1,
+              $2,
+              $3,
+              1,
+              $4::jsonb,
+              'PENDING',
+              0,
+              5,
+              $5,
+              $5
+            )
+          `,
+          [
+            outboxEventId,
+            jobRows[0].id,
+            input.ownerId,
+            JSON.stringify(completePayload),
+            now,
+          ],
+        );
+
+        return {
+          job: mapJob(jobRows[0]),
+          outboxEventId,
+          created: true,
+        };
+      }
+
+      // Job already existed (idempotent replay)
+      const existing = input.idempotencyKey
+        ? await this.findJobByIdempotencyKey(input.ownerId, input.idempotencyKey)
+        : null;
+
+      if (existing) {
+        // For idempotent replay, we still need to ensure an outbox event exists
+        // Check if one exists, if not create it
+        const outboxRows = await tx.query<{ id: string }>(
+          `
+            SELECT id
+            FROM ai_job_outbox
+            WHERE job_id = $1
+            ORDER BY created_at DESC
+            LIMIT 1
+          `,
+          [existing.id],
+        );
+
+        let outboxEventId: string;
+        if (outboxRows[0]) {
+          outboxEventId = outboxRows[0].id;
+        } else {
+          outboxEventId = crypto.randomUUID();
+
+          // Build the complete payload with the actual jobId
+          const completePayload = {
+            ...outboxPayload,
+            jobId: existing.id,
+          };
+
+          await tx.query(
+            `
+              INSERT INTO ai_job_outbox (
+                id,
+                job_id,
+                owner_id,
+                payload_version,
+                payload,
+                state,
+                dispatch_attempt,
+                max_dispatch_attempts,
+                created_at,
+                updated_at
+              )
+              VALUES (
+                $1,
+                $2,
+                $3,
+                1,
+                $4::jsonb,
+                'PENDING',
+                0,
+                5,
+                $5,
+                $5
+              )
+            `,
+            [
+              outboxEventId,
+              existing.id,
+              input.ownerId,
+              JSON.stringify(completePayload),
+              now,
+            ],
+          );
+        }
+
+        return {
+          job: existing,
+          outboxEventId,
+          created: false,
+        };
+      }
+
+      throw new Error(
+        'AI job insert returned no row and no idempotent match.',
+      );
+    });
+  }
+
   async findJobByIdempotencyKey(
     ownerId: string,
     idempotencyKey: string,
@@ -500,6 +716,127 @@ export class PostgresAiRepository implements AiRepository {
     }
 
     return mapJob(job);
+  }
+
+  async completeAttemptWithRetryOutbox(
+    input: CompleteAttemptWithRetryOutboxInput,
+  ): Promise<AiJob> {
+    // For non-RETRYING states, delegate to completeAttempt
+    if (input.nextState !== 'RETRYING') {
+      return this.completeAttempt({
+        id: input.id,
+        expectedState: input.expectedState,
+        nextState: input.nextState,
+        attemptCount: input.attemptCount,
+        failure: input.failure,
+        nextAttemptAt: input.nextAttemptAt,
+      });
+    }
+
+    // For RETRYING state, we need both the job update and outbox insert in one transaction
+    if (!input.retryOutboxPayload) {
+      throw new Error(
+        'retryOutboxPayload is required when nextState is RETRYING',
+      );
+    }
+
+    return this.database.transaction(async (tx) => {
+      const terminal =
+        input.nextState === 'SUCCEEDED' ||
+        input.nextState === 'FAILED' ||
+        input.nextState === 'DEAD_LETTERED';
+
+      // Update the job state
+      const jobRows = await tx.query<JobRow>(
+        `
+          UPDATE ai_jobs
+          SET
+            state = $1,
+            attempt_count = $2,
+            failure_code = $3,
+            failure_message = $4,
+            failure_diagnostic = $5,
+            next_attempt_at = $6,
+            completed_at = CASE
+              WHEN $7 THEN now()
+              ELSE completed_at
+            END,
+            updated_at = now()
+          WHERE id = $8
+            AND state = $9
+          RETURNING ${JOB_COLUMNS}
+        `,
+        [
+          input.nextState,
+          input.attemptCount,
+          input.failure?.code ?? null,
+          input.failure?.message ?? null,
+          input.failure?.diagnostic ?? null,
+          input.nextAttemptAt,
+          terminal,
+          input.id,
+          input.expectedState,
+        ],
+      );
+
+      const job = jobRows[0];
+
+      if (!job) {
+        throw await this.jobConflict(input.id, input.expectedState);
+      }
+
+      // Create the retry outbox event in the same transaction
+      const now = new Date().toISOString();
+      const outboxEventId = crypto.randomUUID();
+
+      // Build the complete payload with the actual jobId and updated attempt
+      const completePayload = {
+        ...input.retryOutboxPayload,
+        jobId: job.id,
+        attempt: job.attempt_count, // Use the current attempt count (which was just incremented)
+      };
+
+      await tx.query(
+        `
+          INSERT INTO ai_job_outbox (
+            id,
+            job_id,
+            owner_id,
+            payload_version,
+            payload,
+            state,
+            dispatch_attempt,
+            max_dispatch_attempts,
+            next_dispatch_at,
+            created_at,
+            updated_at
+          )
+          VALUES (
+            $1,
+            $2,
+            $3,
+            1,
+            $4::jsonb,
+            'PENDING',
+            0,
+            5,
+            $5,
+            $6,
+            $6
+          )
+        `,
+        [
+          outboxEventId,
+          job.id,
+          job.owner_id,
+          JSON.stringify(completePayload),
+          job.next_attempt_at, // Schedule for when the retry is due
+          now,
+        ],
+      );
+
+      return mapJob(job);
+    });
   }
 
   /**
@@ -745,5 +1082,61 @@ export class PostgresAiRepository implements AiRepository {
     );
 
     return rows.map(mapProposal);
+  }
+
+  async createOutboxEventForRetry(
+    job: AiJob,
+    outboxPayload: OutboxEventPayload,
+  ): Promise<string> {
+    const now = new Date().toISOString();
+    const outboxEventId = crypto.randomUUID();
+
+    // Build the complete payload with the actual jobId and updated attempt
+    const completePayload = {
+      ...outboxPayload,
+      jobId: job.id,
+      attempt: job.attemptCount, // Use the current attempt count (which was just incremented)
+    };
+
+    await this.database.query(
+      `
+        INSERT INTO ai_job_outbox (
+          id,
+          job_id,
+          owner_id,
+          payload_version,
+          payload,
+          state,
+          dispatch_attempt,
+          max_dispatch_attempts,
+          next_dispatch_at,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          $1,
+          $2,
+          $3,
+          1,
+          $4::jsonb,
+          'PENDING',
+          0,
+          5,
+          $5,
+          $6,
+          $6
+        )
+      `,
+      [
+        outboxEventId,
+        job.id,
+        job.ownerId,
+        JSON.stringify(completePayload),
+        job.nextAttemptAt, // Schedule for when the retry is due
+        now,
+      ],
+    );
+
+    return outboxEventId;
   }
 }

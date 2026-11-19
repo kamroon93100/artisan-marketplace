@@ -90,6 +90,7 @@ function bearer(credential: string): string {
 
 async function main(): Promise<void> {
   const pool = new Pool({ connectionString });
+  const setupPool = new Pool({ connectionString: process.env.M8_POSTGRES_SETUP_URL ?? connectionString });
 
   try {
     // ---------------------------------------------------------------------
@@ -140,7 +141,7 @@ async function main(): Promise<void> {
     // sessions.
     // ---------------------------------------------------------------------
 
-    await pool.query(
+    await setupPool.query(
       `delete from identity_sessions
          where actor_id in (
            select id from identity_accounts
@@ -149,7 +150,7 @@ async function main(): Promise<void> {
       [[CREDENTIAL_A.username, CREDENTIAL_B.username]],
     );
 
-    await pool.query(
+    await setupPool.query(
       `delete from identity_accounts where username_normalized = any($1::text[])`,
       [[CREDENTIAL_A.username, CREDENTIAL_B.username]],
     );
@@ -336,7 +337,7 @@ async function main(): Promise<void> {
     }
     process.exitCode = 1;
   } finally {
-    await pool.end();
+    await Promise.all([pool.end(), setupPool.end()]);
   }
 }
 

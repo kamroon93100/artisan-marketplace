@@ -1,8 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { resolvePostgresConnectionString } from './src/shared/persistence/postgres-connection.js';
-
 const API_ROOT = new URL('./', import.meta.url);
 const WRANGLER_CONFIG = new URL(
   'wrangler.jsonc',
@@ -73,6 +71,10 @@ function readJsonc(url: URL): Record<string, unknown> {
   return JSON.parse(stripped) as Record<string, unknown>;
 }
 
+function readWranglerConfigSource(): string {
+  return readFileSync(fileURLToPath(WRANGLER_CONFIG), 'utf8');
+}
+
 type HyperdriveConfig = {
   binding?: unknown;
   id?: unknown;
@@ -93,10 +95,11 @@ function hyperdriveConfigs(
 
 /**
  * The Worker reaches PostgreSQL only through the `HYPERDRIVE` binding.
- * A deployed Worker receives the real Hyperdrive configuration, and
- * `wrangler dev` connects through that same binding via
- * `localConnectionString`, so one binding serves both and the
- * repository code needs no development-specific database setting.
+ * A deployed Worker receives the real Hyperdrive configuration. Local
+ * `wrangler dev` uses the documented
+ * CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE environment
+ * variable, so the same binding serves both and no database credential
+ * is committed.
  *
  * This is the configuration regression guard. While the local database
  * was configured as a `HYPERDRIVE` entry in `.dev.vars`, Wrangler read
@@ -107,7 +110,8 @@ function hyperdriveConfigs(
  */
 function testHyperdriveBindingIsConfigured(): void {
   const config = readJsonc(WRANGLER_CONFIG);
-  const binding = hyperdriveConfigs(config).find(
+  const bindings = hyperdriveConfigs(config);
+  const binding = bindings.find(
     (candidate) => candidate.binding === 'HYPERDRIVE',
   );
 
@@ -119,38 +123,17 @@ function testHyperdriveBindingIsConfigured(): void {
     fail('the HYPERDRIVE binding declares no configuration id.');
   }
 
-  if (
-    typeof binding.localConnectionString !== 'string' ||
-    !binding.localConnectionString
-  ) {
-    fail(
-      'the HYPERDRIVE binding declares no localConnectionString, so wrangler dev has no local database to connect to.',
-    );
+  for (const candidate of bindings) {
+    if ('localConnectionString' in candidate) {
+      fail(
+        'wrangler.jsonc must not embed localConnectionString; use CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE for local development.',
+      );
+    }
   }
-}
 
-/**
- * The local connection string must survive the resolver. A binding
- * whose `localConnectionString` the resolver discards leaves `wrangler
- * dev` with no database, which then falls back to volatile in-memory
- * storage and looks healthy while losing every write.
- */
-function testLocalConnectionStringReachesTheResolver(): void {
-  const config = readJsonc(WRANGLER_CONFIG);
-  const binding = hyperdriveConfigs(config).find(
-    (candidate) => candidate.binding === 'HYPERDRIVE',
-  );
-
-  const resolved = resolvePostgresConnectionString({
-    HYPERDRIVE: {
-      connectionString:
-        binding?.localConnectionString as string,
-    },
-  });
-
-  if (resolved !== binding?.localConnectionString) {
+  if (/(?:postgres(?:ql)?):\/\//i.test(readWranglerConfigSource())) {
     fail(
-      `the configured local connection string did not resolve, received ${String(resolved)}.`,
+      'wrangler.jsonc must not embed a PostgreSQL connection URI or credential.',
     );
   }
 }
@@ -159,7 +142,9 @@ function testLocalConnectionStringReachesTheResolver(): void {
  * One binding is the single source of the local database. A
  * `HYPERDRIVE` entry in `.dev.vars` cannot reproduce a binding because
  * Wrangler reads that file as plain text, and a variable of the same
- * name competes with the binding for the same environment key.
+ * name competes with the binding for the same environment key. The
+ * local database credential is supplied by the shell environment
+ * variable CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE.
  */
 function testDevVarsDoNotRedefineTheBinding(): void {
   let source: string;
@@ -174,7 +159,7 @@ function testDevVarsDoNotRedefineTheBinding(): void {
 
   if (/^\s*HYPERDRIVE\s*=/m.test(source)) {
     fail(
-      '.dev.vars defines HYPERDRIVE; the local database belongs in the wrangler.jsonc hyperdrive binding.',
+      '.dev.vars defines HYPERDRIVE; local Hyperdrive connections come from CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE.',
     );
   }
 }
@@ -227,9 +212,32 @@ function testWorkerEntryIsTheWorkerShell(): void {
   }
 }
 
+/**
+ * The Workers AI binding must be declared in wrangler.jsonc.
+ * This enables the `env.AI` binding for model inference without an external API key.
+ */
+function testAiBindingIsConfigured(): void {
+  const config = readJsonc(WRANGLER_CONFIG);
+  const aiBinding = config.ai;
+
+  if (!aiBinding) {
+    fail('wrangler.jsonc must declare an "ai" binding for Workers AI.');
+  }
+
+  if (typeof aiBinding !== 'object' || aiBinding === null) {
+    fail('the "ai" binding must be an object.');
+  }
+
+  const binding = aiBinding as Record<string, unknown>;
+
+  if (binding.binding !== 'AI') {
+    fail(`the "ai" binding must have binding: "AI", received ${String(binding.binding)}.`);
+  }
+}
+
 testHyperdriveBindingIsConfigured();
-testLocalConnectionStringReachesTheResolver();
 testDevVarsDoNotRedefineTheBinding();
 testWorkerEntryIsTheWorkerShell();
+testAiBindingIsConfigured();
 
 console.log('WRANGLER CONFIG TESTS PASSED');

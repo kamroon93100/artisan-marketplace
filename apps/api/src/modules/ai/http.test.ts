@@ -1,6 +1,106 @@
 import app from '../../index.js';
 
+// This file's HTTP fixtures cannot pass a build mode through `app.request`.
+// The suite-scoped development build matches the local environment below;
+// production call sites still omit the seam.
+process.env.NODE_ENV = 'development';
+
 type JsonObject = Record<string, unknown>;
+
+interface RecordedDurableCheck {
+  objectName: string;
+  url: string;
+  method: string | undefined;
+  body: {
+    limit: number;
+    windowMs: number;
+    now: number;
+  };
+}
+
+/**
+ * Creates a fake Durable Object namespace that enforces rate limits per objectName
+ * (hashed subject). Each objectName gets its own counter; after the policy limit
+ * is exceeded, it returns a denied response. This mimics the sliding-window
+ * behavior for test purposes.
+ */
+function createEnforcingDurableNamespace(): {
+  namespace: DurableObjectNamespace;
+  checks: RecordedDurableCheck[];
+  subjectByObjectName: Map<string, string>;
+} {
+  const checks: RecordedDurableCheck[] = [];
+  const subjectByObjectName = new Map<string, string>();
+  const callCounts = new Map<string, number>();
+
+  const namespace = {
+    idFromName(name: string) {
+      return name as unknown as DurableObjectId;
+    },
+    get(id: DurableObjectId) {
+      const objectName = String(id);
+      return {
+        async fetch(input: RequestInfo | URL, init?: RequestInit) {
+          const body = JSON.parse(String(init?.body)) as RecordedDurableCheck['body'];
+          const count = (callCounts.get(objectName) || 0) + 1;
+          callCounts.set(objectName, count);
+
+          const check: RecordedDurableCheck = {
+            objectName,
+            url: String(input),
+            method: init?.method,
+            body,
+          };
+          checks.push(check);
+
+          // Enforce limit per objectName based on the policy in the request body
+          if (count > body.limit) {
+            return new Response(
+              JSON.stringify({
+                allowed: false,
+                remaining: 0,
+                resetAt: Date.now() + 60_000,
+              }),
+              {
+                status: 200,
+                headers: { 'content-type': 'application/json' },
+              },
+            );
+          }
+
+          return new Response(
+            JSON.stringify({
+              allowed: true,
+              remaining: body.limit - count,
+              resetAt: Date.now() + 60_000,
+            }),
+            {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            },
+          );
+        },
+      } as unknown as DurableObjectStub;
+    },
+  } as unknown as DurableObjectNamespace;
+
+  return { namespace, checks, subjectByObjectName };
+}
+
+async function readJson<T>(
+  response: Response,
+): Promise<T> {
+  return (await response.json()) as T;
+}
+
+function expect(
+  condition: boolean,
+  message: string,
+): void {
+  if (!condition) {
+    throw new Error(`TEST FAILED: ${message}`);
+  }
+}
 
 async function errorCode(response: Response): Promise<string | undefined> {
   const body = (await response.json()) as {
@@ -62,9 +162,11 @@ async function testAiRoutesRejectAnonymousCallers(): Promise<void> {
  */
 async function main(): Promise<void> {
   await testAiRoutesRejectAnonymousCallers();
+  await testAiRunRateLimitSharedAcrossJobIds();
 
   const env = {
     APP_ENV: 'development',
+    LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
     DEV_OWNER_ID: '00000000-0000-4000-8000-000000000001',
   };
 
@@ -353,7 +455,11 @@ async function main(): Promise<void> {
         decisions: [{ proposalId: titleProposal.id, decision: 'ACCEPTED' }],
       }),
     },
-    { APP_ENV: 'development', DEV_OWNER_ID: '00000000-0000-4000-8000-000000000099' },
+    {
+      APP_ENV: 'development',
+      LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+      DEV_OWNER_ID: '00000000-0000-4000-8000-000000000099',
+    },
   );
 
   if (stranger.status !== 403) {
@@ -363,6 +469,193 @@ async function main(): Promise<void> {
   }
 
   console.log('AI HTTP PIPELINE TESTS PASSED');
+}
+
+/**
+ * Regression test: the ai.job.run rate limit is shared across
+ * different job IDs for the same actor. Uses the production resolver
+ * with a fake Durable Object that enforces the limit.
+ *
+ * Two different AI jobs are enqueued and run alternately by the same actor.
+ * The budget is 10 requests per 60 seconds. Requests 1-10 must succeed
+ * (not rate-limited). Request 11 must be rejected with HTTP 429.
+ */
+async function testAiRunRateLimitSharedAcrossJobIds(): Promise<void> {
+  const { namespace } = createEnforcingDurableNamespace();
+
+  const sessionToken = 'test-session-token';
+  const sessionActorId = 'actor-ai-run-rate-limit';
+
+  // Development environment for test setup (in-memory repo + in-memory auth + deterministic AI provider).
+  // Uses a dedicated actor so its rate-limit buckets don't interfere with
+  // other tests in this suite.
+  const setupEnv = {
+    APP_ENV: 'development',
+    LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+    DEV_OWNER_ID: sessionActorId,
+  };
+
+  // Production-like environment for the rate-limit test:
+  // - APP_ENV: development (so AI service uses in-memory repo + deterministic provider)
+  // - NO LOCAL_IN_MEMORY_AUTH_ENABLED (so rate limiter uses Durable Object)
+  // - Static session via SESSION_TOKEN + SESSION_ACTOR_ID
+  // - Fake Durable Object namespace that enforces limits
+  const rateLimitEnv = {
+    APP_ENV: 'development',
+    SESSION_TOKEN: sessionToken,
+    SESSION_ACTOR_ID: sessionActorId,
+    AUTH_RATE_LIMITER: namespace,
+  };
+
+  // Helper to make requests with the rate limit env
+  async function jsonWithRateLimit(
+    path: string,
+    method: string,
+    body?: unknown,
+    headers: Record<string, string> = {},
+  ): Promise<Response> {
+    return app.request(
+      path,
+      {
+        method,
+        headers: {
+          ...(body === undefined
+            ? {}
+            : { 'content-type': 'application/json' }),
+          authorization: `Bearer ${sessionToken}`,
+          ...headers,
+        },
+        ...(body === undefined
+          ? {}
+          : { body: JSON.stringify(body) }),
+      },
+      rateLimitEnv,
+    );
+  }
+
+  // Create a product using the setup environment
+  const created = await app.request(
+    '/catalog/products',
+    {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'idempotency-key': 'ai-rl-product',
+      },
+      body: JSON.stringify({
+        title: 'Test Basket',
+        category: 'basket',
+        materials: ['bamboo'],
+      }),
+    },
+    setupEnv,
+  );
+
+  expect(created.status === 201, `Expected product create 201, got ${created.status}.`);
+  const product = ((await created.json()) as JsonObject).product as { id: string };
+
+  // Enqueue two AI jobs for that product using setup env
+  const enqueuedA = await app.request(
+    `/catalog/products/${product.id}/ai-jobs`,
+    {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'idempotency-key': 'ai-rl-job-a',
+        'x-correlation-id': 'ai-rl-corr-a',
+      },
+      body: JSON.stringify({
+        transcription: 'A hand-woven basket for storing bread.',
+        media: [{ mediaId: 'media-1', kind: 'IMAGE' }],
+      }),
+    },
+    setupEnv,
+  );
+
+  expect(enqueuedA.status === 201, `Expected AI enqueue 201, got ${enqueuedA.status}.`);
+  const enqueueBodyA = (await enqueuedA.json()) as { job: { id: string; state: string } };
+  const jobIdA = enqueueBodyA.job.id;
+
+  const enqueuedB = await app.request(
+    `/catalog/products/${product.id}/ai-jobs`,
+    {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'idempotency-key': 'ai-rl-job-b',
+        'x-correlation-id': 'ai-rl-corr-b',
+      },
+      body: JSON.stringify({
+        transcription: 'Another basket for testing.',
+        media: [{ mediaId: 'media-2', kind: 'IMAGE' }],
+      }),
+    },
+    setupEnv,
+  );
+
+  expect(enqueuedB.status === 201, `Expected AI enqueue 201, got ${enqueuedB.status}.`);
+  const enqueueBodyB = (await enqueuedB.json()) as { job: { id: string; state: string } };
+  const jobIdB = enqueueBodyB.job.id;
+
+  // Now run the two jobs alternately to exhaust the shared budget (10)
+  // ai.job.run limit is 10 per 60s per actor
+  let allowedCount = 0;
+  let deniedCount = 0;
+
+  for (let i = 0; i < 11; i++) {
+    const jobId = i % 2 === 0 ? jobIdA : jobIdB;
+    const idempotencyKey = `ai-rl-run-${i}`;
+
+    const response = await jsonWithRateLimit(
+      `/catalog/ai-jobs/${jobId}/run`,
+      'POST',
+      undefined,
+      { 'idempotency-key': idempotencyKey },
+    );
+
+    if (response.status === 429) {
+      deniedCount++;
+      // Verify rate limit error envelope
+      const body = await readJson<{ error: { code: string; details?: { resetAt?: number } } }>(response);
+      expect(
+        body.error.code === 'RATE_LIMITED',
+        `Expected RATE_LIMITED error code, got ${body.error.code}`,
+      );
+      expect(
+        response.headers.get('x-ratelimit-remaining') === '0',
+        'Rate limited response must have x-ratelimit-remaining: 0',
+      );
+      expect(
+        response.headers.get('retry-after') !== null,
+        'Rate limited response must have retry-after header',
+      );
+    } else if (response.status === 200 || response.status === 409) {
+      allowedCount++;
+      // 409 (CONFLICT) means the rate limiter allowed the request but the service
+      // rejected it because the job was already run. This is expected when
+      // re-running the same job. The rate limit budget is still consumed.
+      // Verify rate limit headers on allowed responses
+      expect(
+        response.headers.get('x-ratelimit-remaining') !== null,
+        'Allowed response must have x-ratelimit-remaining header',
+      );
+      expect(
+        response.headers.get('x-ratelimit-reset') !== null,
+        'Allowed response must have x-ratelimit-reset header',
+      );
+    } else {
+      throw new Error(`Unexpected status ${response.status} on request ${i + 1}`);
+    }
+  }
+
+  expect(
+    allowedCount === 10,
+    `Expected 10 allowed requests, got ${allowedCount}`,
+  );
+  expect(
+    deniedCount === 1,
+    `Expected 1 denied request, got ${deniedCount}`,
+  );
 }
 
 function titleProposalValue(

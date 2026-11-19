@@ -335,7 +335,7 @@ export class IdentityService {
     let stage = 'duplicate-username-check';
     try {
       // Check for duplicate username (Q3.4, Q5.4)
-      if (this.isDurableStore && this.store.findAccountByNormalizedUsername) {
+      if (this.store.findAccountByNormalizedUsername) {
         const existing = await this.store.findAccountByNormalizedUsername(normalizedUsername);
         if (existing) {
           throw new AppError(
@@ -366,7 +366,7 @@ export class IdentityService {
       };
 
       // Persist account
-      if (this.isDurableStore && this.store.createAccount) {
+      if (this.store.createAccount) {
         await this.store.createAccount(account);
       }
 
@@ -407,8 +407,8 @@ export class IdentityService {
         });
       }
 
-      // For in-memory store, account persistence is not available
-      // This is acceptable for test/dev environments
+      // The account was persisted above when the store exposes account
+      // support, which includes the development/test in-memory store.
 
       return {
         sessionId,
@@ -483,7 +483,7 @@ export class IdentityService {
       roles: readonly string[];
     } | null = null;
 
-    if (this.isDurableStore && this.store.verifyAccountPassword) {
+    if (this.store.verifyAccountPassword) {
       account = await this.store.verifyAccountPassword(normalizedUsername, input.password);
     }
 

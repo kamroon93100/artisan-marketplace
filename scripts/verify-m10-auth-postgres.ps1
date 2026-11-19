@@ -6,14 +6,14 @@ $ErrorActionPreference = "Stop"
 # service-free fast path, and this proof needs a running database plus a
 # restart. Run this when the local stack is up.
 #
-# The connection string is read from the Hyperdrive binding in
-# wrangler.jsonc rather than duplicated here, so the local database is
-# configured in exactly one place.
+# The connection string is read from the documented
+# CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE environment
+# variable, so the local database credential is never committed.
 #
 # Scope guard: this proof refuses to run against anything other than the
-# repository's own project database - the Hyperdrive localConnectionString
-# on port 55432. The native PostgreSQL listening on 5432 is a different
-# instance on this machine and is never connected to, read, or written.
+# repository's own project database - the local connection string on port
+# 55432. The native PostgreSQL listening on 5432 is a different instance on
+# this machine and is never connected to, read, or written.
 # The guard is an explicit port/database assertion, not an assumption.
 #
 # What this script proves, in order:
@@ -30,7 +30,6 @@ $root = Split-Path -Parent $PSScriptRoot
 $tsx = Join-Path $root "node_modules\.bin\tsx.cmd"
 $testTsconfig = Join-Path $root "tests\m10-auth-postgres\tsconfig.json"
 $suite = Join-Path $root "tests\m10-auth-postgres\auth-postgres-runtime.test.ts"
-$wranglerConfig = Join-Path $root "apps\api\wrangler.jsonc"
 $migrations = @(
   (Join-Path $root "infra\migrations\001_catalog\migration.sql"),
   (Join-Path $root "infra\migrations\002_media\migration.sql"),
@@ -55,19 +54,8 @@ foreach ($migration in $migrations) {
   if (-not (Test-Path $migration)) { throw "Migration not found: $migration" }
 }
 
-# Comments are stripped by dropping whole-line `//` comments only. A
-# naive `//` strip would corrupt the `postgresql://` scheme inside the
-# connection string.
-$config = (Get-Content -LiteralPath $wranglerConfig) |
-  Where-Object { $_.Trim() -notlike "//*" } |
-  Out-String |
-  ConvertFrom-Json
-
-$localConnectionString = $config.hyperdrive[0].localConnectionString.Trim()
-
-if (-not $localConnectionString) {
-  throw "No Hyperdrive localConnectionString found in $wranglerConfig"
-}
+. (Join-Path $root "scripts\lib\hyperdrive-local-connection.ps1")
+$localConnectionString = Get-HyperdriveLocalConnectionString
 
 # The database and role are read from the same connection string rather than
 # repeated here, so the migrations are applied to the database the tests will

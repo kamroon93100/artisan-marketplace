@@ -10,6 +10,22 @@ Define how local artisan changes move from the device to canonical server state 
 - Local pending operations survive app restart.
 - Network availability is not required to create a draft.
 
+## Local Account Ownership
+- Every locally persisted draft, media intent, and pending sync operation is
+  keyed to the authenticated server actor id that created it.
+- Storage queries require that actor. Screens may hide records, but hiding is
+  not the boundary: the storage layer refuses cross-account reads, writes,
+  claims, retries, and recovery.
+- Logout clears credentials without deleting account-owned local rows.
+  Signing back in as the same actor restores access. A different actor never
+  receives those rows.
+- A sync run only lists, recovers, claims, and uploads operations belonging to
+  its own actor, so a queued upload cannot be sent under another account.
+- Rows with no owner (created before ownership existed, or by a defective
+  build) are preserved but are not readable or syncable by any account. They
+  are never assigned to whichever actor signs in next; recovery requires a
+  separate, explicit policy.
+
 ## Server Authority
 - PostgreSQL owns synchronized canonical business state.
 - A queue never becomes canonical state.

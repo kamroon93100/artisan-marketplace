@@ -73,7 +73,7 @@ export type SessionStore = {
   findByRefreshToken?(refreshToken: string): Promise<SessionRecord | null>;
   findByPreviousRefreshToken?(previousRefreshToken: string): Promise<SessionRecord | null>;
 
-  // Account management operations (durable store only)
+  // Account management operations (durable and development/test in-memory stores)
   createAccount?(account: {
     id: string;
     username: string;

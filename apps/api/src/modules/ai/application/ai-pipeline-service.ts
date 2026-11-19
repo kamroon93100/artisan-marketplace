@@ -30,6 +30,9 @@ import type { CatalogProductPort } from './catalog-product-port.js';
 import type {
   AiRepository,
   CreateAiJobResult,
+  CreateAiJobWithOutboxResult,
+  OutboxEventPayload,
+  CompleteAttemptWithRetryOutboxInput,
 } from './ai-repository.js';
 
 /**
@@ -183,7 +186,22 @@ export class AiPipelineService {
         input.transcription?.trim() || null,
     };
 
-    return this.repository.createJob({
+    // Build the outbox payload that the consumer needs to re-hydrate context.
+    // Note: jobId is NOT included here because it's not known at enqueue time.
+    // The repository injects the real jobId when persisting the outbox event
+    // after the job is created in the same transaction.
+    const outboxPayload: OutboxEventPayload = {
+      payloadVersion: 1,
+      productId: product.id,
+      ownerId: input.actorId,
+      correlationId: input.correlationId,
+      causationId: input.causationId ?? null,
+      idempotencyKey,
+      attempt: 0,
+      maxAttempts: defaultMaxAttempts(input.maxAttempts),
+    };
+
+    const result = await this.repository.createJobWithOutbox({
       productId: product.id,
       ownerId: input.actorId,
       jobType: CATALOG_FIELD_GENERATION,
@@ -199,7 +217,12 @@ export class AiPipelineService {
       correlationId: input.correlationId,
       causationId: input.causationId ?? null,
       idempotencyKey,
-    });
+    }, outboxPayload);
+
+    return {
+      job: result.job,
+      created: result.created,
+    };
   }
 
   /**
@@ -335,18 +358,36 @@ export class AiPipelineService {
       failure,
     );
 
-    const settled =
-      await this.repository.completeAttempt({
-        id: job.id,
-        expectedState: 'RUNNING',
-        nextState,
-        attemptCount: job.attemptCount,
-        failure,
-        nextAttemptAt:
-          nextState === 'RETRYING'
-            ? nextAttemptAt(job.attemptCount, Date.now())
-            : null,
-      });
+    const nextAttemptAtValue =
+      nextState === 'RETRYING'
+        ? nextAttemptAt(job.attemptCount, Date.now())
+        : null;
+
+    // Build retry outbox payload if needed (only used when nextState === 'RETRYING')
+    const retryOutboxPayload: OutboxEventPayload | undefined =
+      nextState === 'RETRYING'
+        ? {
+            payloadVersion: 1,
+            productId: job.productId,
+            ownerId: job.ownerId,
+            correlationId: job.correlationId,
+            causationId: job.causationId,
+            idempotencyKey: job.idempotencyKey,
+            attempt: job.attemptCount, // Current attempt count (already incremented by beginAttempt)
+            maxAttempts: job.maxAttempts,
+          }
+        : undefined;
+
+    // Atomically complete the attempt and create retry outbox event (if RETRYING)
+    const settled = await this.repository.completeAttemptWithRetryOutbox({
+      id: job.id,
+      expectedState: 'RUNNING',
+      nextState,
+      attemptCount: job.attemptCount,
+      failure,
+      nextAttemptAt: nextAttemptAtValue,
+      retryOutboxPayload,
+    });
 
     return {
       job: settled,

@@ -12,8 +12,12 @@ import {
 import type {
   PostgresConnectionEnv,
 } from '../../shared/persistence/postgres-connection.js';
+import {
+  allowsLocalInMemoryAuthState,
+  type LocalAuthStatePolicyEnv,
+} from '../../shared/context/auth-state-policy.js';
 
-export type IdentityEnv = {
+export type IdentityEnv = LocalAuthStatePolicyEnv & {
   APP_ENV?: string;
   /**
    * Injectable connection seam for tests and proofs. A deployed Worker never
@@ -158,52 +162,47 @@ export function hasSessionStoreConfigured(env: IdentityEnv): boolean {
 
 /**
  * Creates an IdentityService with the appropriate store for the environment.
- * For development/test: uses in-memory store.
- * For other environments with a database (the `DB_POOL` seam, or the
- * `HYPERDRIVE` binding a deployed Worker receives): uses PostgreSQL store.
- * For other environments without either: returns null (closed failure).
+ *
+ * The in-memory store is available only when the shared policy permits
+ * process-local authentication state: an explicit local/test environment,
+ * the local-only opt-in, and an explicitly matching non-production build
+ * mode. Any environment with a database (the `DB_POOL` seam, or the
+ * `HYPERDRIVE` binding a deployed Worker receives) uses the PostgreSQL
+ * store. Without either store, the result is null (closed failure).
+ *
+ * `buildMode` is a test seam only. Production call sites omit it, so the
+ * statically replaced `process.env.NODE_ENV` decides.
  */
 export function createIdentityService(
   env: IdentityEnv,
+  buildMode: string | undefined = process.env.NODE_ENV,
 ): IdentityService | null {
-  // Development/test: use in-memory store
-  if (allowsInMemorySessionStore(env.APP_ENV)) {
+  if (allowsInMemorySessionStore(env, buildMode)) {
     return inMemoryIdentityService;
   }
 
-  // Production/staging with a database: use the PostgreSQL store, whether
-  // the connection was injected (`DB_POOL`) or resolved from `HYPERDRIVE`.
   const store = createPostgresSessionStore(resolveIdentityConnection(env));
 
   if (store) {
     return new IdentityService(store);
   }
 
-  // No store configured
   return null;
 }
 
 /**
- * Environments in which the non-persistent session store is acceptable.
+ * Whether the non-persistent session store is acceptable for this
+ * environment.
  *
- * Phase 1A has no durable session storage, so the only store that exists
- * is volatile. Volatile session state in a deployed environment would
- * present working authentication that silently resets per isolate and per
- * restart, which is worse than having none: the identity resolution is
- * therefore available only in development and test, and every other
- * environment keeps the exact behavior it has today (configured static
- * session, development/test seam, or a closed failure).
- *
- * Durable storage is Phase 1B and needs its own migration approval; when
- * it lands, this is the one function that changes.
+ * The shared policy is the single source of this decision. A mistaken
+ * `APP_ENV` or a copied local opt-in cannot enable process-local sessions in
+ * a production build, and a missing or unknown build mode fails closed.
  */
 export function allowsInMemorySessionStore(
-  environment: string | undefined,
+  env: LocalAuthStatePolicyEnv,
+  buildMode: string | undefined = process.env.NODE_ENV,
 ): boolean {
-  return (
-    environment === 'development' ||
-    environment === 'test'
-  );
+  return allowsLocalInMemoryAuthState(env, buildMode);
 }
 
 /**
@@ -218,6 +217,7 @@ export function allowsInMemorySessionStore(
  */
 export function getIdentityService(
   env: IdentityEnv,
+  buildMode: string | undefined = process.env.NODE_ENV,
 ): IdentityService | null {
-  return createIdentityService(env);
+  return createIdentityService(env, buildMode);
 }

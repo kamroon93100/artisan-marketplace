@@ -8,9 +8,9 @@ import type {
 import type { ApiEnv } from '../../shared/context/api-env.js';
 import { requireActor } from '../../shared/auth/session.js';
 import {
-  aiEnqueueLimiter,
-  aiRunLimiter,
-  rateLimitMiddleware,
+  enforceRateLimit,
+  resolveOperationRateLimiters,
+  buildOperationKey,
 } from '../../shared/ratelimit/index.js';
 import { AppError } from '../../shared/errors/app-error.js';
 import { getAiServices } from './composition.js';
@@ -283,8 +283,14 @@ function readDecisionValue(
 
 aiRoutes.post(
   '/products/:id/ai-jobs',
-  rateLimitMiddleware(aiEnqueueLimiter, 'AI job enqueue'),
   async (c) => {
+    const limiters = resolveOperationRateLimiters(c.env);
+    await enforceRateLimit(
+      c,
+      limiters['ai.job.enqueue'],
+      buildOperationKey('ai.job.enqueue', actorId(c)),
+      'AI job enqueue',
+    );
     const body = await c.req.json<{
       media?: unknown;
       transcription?: unknown;
@@ -304,6 +310,7 @@ aiRoutes.post(
 
     const result = await getAiServices(
       c.env,
+      actorId(c),
     ).pipeline.enqueue({
       productId: routeId(c, 'id'),
       actorId: actorId(c),
@@ -330,7 +337,7 @@ aiRoutes.post(
 );
 
 aiRoutes.get('/products/:id/ai-jobs', async (c) => {
-  const jobs = await getAiServices(c.env).pipeline.listJobs(
+  const jobs = await getAiServices(c.env, actorId(c)).pipeline.listJobs(
     routeId(c, 'id'),
     actorId(c),
   );
@@ -339,7 +346,7 @@ aiRoutes.get('/products/:id/ai-jobs', async (c) => {
 });
 
 aiRoutes.get('/ai-jobs/:jobId', async (c) => {
-  const result = await getAiServices(c.env).pipeline.getJob(
+  const result = await getAiServices(c.env, actorId(c)).pipeline.getJob(
     routeId(c, 'jobId'),
     actorId(c),
   );
@@ -355,6 +362,7 @@ aiRoutes.get(
   async (c) => {
     const proposals = await getAiServices(
       c.env,
+      actorId(c),
     ).pipeline.listProposalHistory(
       routeId(c, 'jobId'),
       actorId(c),
@@ -366,10 +374,17 @@ aiRoutes.get(
 
 aiRoutes.post(
   '/ai-jobs/:jobId/run',
-  rateLimitMiddleware(aiRunLimiter, 'AI job run'),
   async (c) => {
+    const limiters = resolveOperationRateLimiters(c.env);
+    await enforceRateLimit(
+      c,
+      limiters['ai.job.run'],
+      buildOperationKey('ai.job.run', actorId(c)),
+      'AI job execution',
+    );
     const result = await getAiServices(
       c.env,
+      actorId(c),
     ).pipeline.run(
       routeId(c, 'jobId'),
       actorId(c),
@@ -388,6 +403,7 @@ aiRoutes.post('/ai-jobs/:jobId/decisions', async (c) => {
 
   const result = await getAiServices(
     c.env,
+    actorId(c),
   ).review.applyDecisions(
     await requireProductIdOfDecisions(c),
     actorId(c),
@@ -415,6 +431,7 @@ async function requireProductIdOfDecisions(
 
   const job = await getAiServices(
     c.env,
+    actorId(c),
   ).pipeline.requireOwnedJob(jobId, actorId(c));
 
   return job.productId;

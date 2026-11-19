@@ -17,9 +17,10 @@ const CONNECTION_STRING =
 
 /**
  * A deployed Worker receives a Hyperdrive binding, which is the shape
- * production depends on and must keep working. `wrangler dev` delivers
- * the same shape, configured with a `localConnectionString`, so this is
- * the shape every environment uses.
+ * production depends on and must keep working. For local `wrangler dev`,
+ * Wrangler supplies the binding from
+ * `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE`, so the same
+ * binding shape reaches the resolver in every environment.
  */
 function testHyperdriveBindingResolves(): void {
   expect(

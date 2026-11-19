@@ -570,6 +570,113 @@ async function testAuthorizationIsIdempotent(): Promise<void> {
   );
 }
 
+async function testReauthorizationResumesUploadingRecord(): Promise<void> {
+  const { service, storage, productId } =
+    await buildService();
+
+  const mediaId = await createAttachment(
+    service,
+    productId,
+    'media-key-resume',
+  );
+
+  const authorized = await service.authorizeUpload(
+    mediaId,
+    OWNER_ID,
+  );
+  const started = await service.startUpload(mediaId, OWNER_ID);
+
+  assertEqual(
+    started.attachment.state,
+    'UPLOADING',
+    'the initial start reaches UPLOADING',
+  );
+  assertEqual(
+    started.attachment.id,
+    mediaId,
+    'the initial start keeps the media record',
+  );
+  assertEqual(
+    started.upload.objectKey,
+    authorized.upload.objectKey,
+    'the initial start keeps the authorized object key',
+  );
+
+  // No object is written: the transfer failed while the server record
+  // remains UPLOADING. The client retry path authorizes again before it
+  // starts the upload again.
+  const issuedBeforeRetry = storage.issued.length;
+  const reauthorized = await service.authorizeUpload(
+    mediaId,
+    OWNER_ID,
+  );
+
+  assertEqual(
+    reauthorized.attachment.state,
+    'UPLOADING',
+    're-authorizing an uploading record does not move it backwards',
+  );
+  assertEqual(
+    reauthorized.attachment.id,
+    mediaId,
+    're-authorizing reuses the same media record',
+  );
+  assertEqual(
+    reauthorized.upload.objectKey,
+    authorized.upload.objectKey,
+    're-authorizing reuses the server-owned object key',
+  );
+  assertEqual(
+    storage.issued.length,
+    issuedBeforeRetry + 1,
+    're-authorizing issues a fresh descriptor',
+  );
+
+  const restarted = await service.startUpload(
+    mediaId,
+    OWNER_ID,
+  );
+
+  assertEqual(
+    restarted.attachment.state,
+    'UPLOADING',
+    'starting an already-uploading record is a resume',
+  );
+  assertEqual(
+    restarted.attachment.id,
+    mediaId,
+    'the resumed upload keeps the media record',
+  );
+  assertEqual(
+    restarted.upload.objectKey,
+    authorized.upload.objectKey,
+    'the resumed upload keeps the object key',
+  );
+  assertEqual(
+    storage.issued.length,
+    issuedBeforeRetry + 2,
+    'the resumed start issues a fresh descriptor',
+  );
+
+  putMatchingObject(restarted.upload.objectKey, storage);
+
+  const completed = await service.completeUpload(
+    mediaId,
+    OWNER_ID,
+  );
+
+  assertEqual(
+    completed.verification.verified,
+    true,
+    'the resumed upload verifies the same object',
+  );
+  assertEqual(
+    completed.attachment.state,
+    'VERIFIED',
+    'the resumed upload reaches VERIFIED',
+  );
+}
+
 async function testCompletionIsIdempotentAfterAmbiguousRetry(): Promise<
   void
 > {
@@ -1349,6 +1456,7 @@ async function main(): Promise<void> {
   await testFailedRecordsCannotRecordArrival();
   await testRejectsWrongBytes();
   await testAuthorizationIsIdempotent();
+  await testReauthorizationResumesUploadingRecord();
   await testCompletionIsIdempotentAfterAmbiguousRetry();
   await testAuthorizationBoundaries();
   await testUploadAuthorizationIsObjectSpecific();

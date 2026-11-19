@@ -34,16 +34,31 @@ function allowsInMemoryRepository(
   );
 }
 
+/**
+ * Builds the catalog service for one authenticated request.
+ *
+ * `actorId` is the session-resolved actor. It is carried into every
+ * PostgreSQL connection so row-level security can scope rows to the account
+ * that asked. Omitting it is allowed only for composition-level tests and
+ * for the in-memory development seam. Under the non-owner application login,
+ * a configured deployment that omits it fails closed at the database because
+ * no actor setting is present; the owner/superuser connection currently
+ * bypasses RLS.
+ */
 export function getCatalogService(
   env: DatabaseBindingEnv,
+  actorId?: string,
 ): CatalogService {
   const connectionString =
     resolvePostgresConnectionString(env);
 
   if (connectionString) {
-    const database = new PostgresDatabase(
-      connectionString,
-    );
+    const database = actorId
+      ? PostgresDatabase.forActor(
+          connectionString,
+          actorId,
+        )
+      : new PostgresDatabase(connectionString);
 
     return new CatalogService(
       new PostgresCatalogRepository(database),

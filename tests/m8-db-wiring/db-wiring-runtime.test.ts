@@ -209,7 +209,7 @@ async function expectHttp(
 }
 
 async function main(): Promise<void> {
-  const setupPool = new Pool({ connectionString });
+  const setupPool = new Pool({ connectionString: process.env.M8_DB_WIRING_SETUP_URL ?? connectionString });
   try {
     // ---------------------------------------------------------------------
     // Preconditions: the environment carries the binding and nothing else.

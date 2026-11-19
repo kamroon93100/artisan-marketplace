@@ -381,9 +381,34 @@ export class MediaService {
       );
 
     /**
-     * A fresh authorization always leaves the record in
-     * UPLOAD_AUTHORIZED, whether or not the object key was allocated
-     * before.
+     * An UPLOADING record is already authorized to write its object.
+     * Reissuing a fresh URL must not move it backwards to
+     * UPLOAD_AUTHORIZED, which is not a legal transition from
+     * UPLOADING. Instead, resume the existing write against the same
+     * server-owned object key.
+     */
+    if (attachment.state === 'UPLOADING') {
+      if (!attachment.objectKey) {
+        throw new AppError(
+          'CONFLICT',
+          'Media attachment has no object to upload to.',
+          { mediaId, state: attachment.state },
+        );
+      }
+
+      return {
+        attachment,
+        upload: await this.issueUploadDescriptor(
+          attachment,
+          attachment.objectKey,
+          expiresInSeconds,
+        ),
+      };
+    }
+
+    /**
+     * A fresh authorization leaves the record in UPLOAD_AUTHORIZED,
+     * whether or not the object key was allocated before.
      *
      * A record that was re-armed after a failure or an action state
      * must return to REQUESTED first: UPLOAD_AUTHORIZED is not a legal

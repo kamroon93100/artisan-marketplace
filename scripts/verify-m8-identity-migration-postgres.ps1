@@ -7,15 +7,15 @@ $ErrorActionPreference = "Stop"
 # service-free fast path, and this proof needs a running database plus a
 # restart. Run it when the local stack is up.
 #
-# The connection string is read from the Hyperdrive binding in
-# wrangler.jsonc rather than duplicated here, so the local database is
-# configured in exactly one place - exactly as verify-m3 through
-# verify-m6 do.
+# The connection string is read from the documented
+# CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE environment
+# variable, so the local database credential is never committed - exactly
+# as verify-m3 through verify-m6 do.
 #
 # Scope guard: this proof refuses to run against anything other than the
-# repository's own project database - the Hyperdrive localConnectionString
-# on port 55432. The native PostgreSQL listening on 5432 is a different
-# instance on this machine and is never connected to, read, or written.
+# repository's own project database - the local connection string on port
+# 55432. The native PostgreSQL listening on 5432 is a different instance on
+# this machine and is never connected to, read, or written.
 # The guard is an explicit port/database assertion, not an assumption.
 #
 # What this script proves, in order:
@@ -49,7 +49,6 @@ $ErrorActionPreference = "Stop"
 # digest.
 
 $root = Split-Path -Parent $PSScriptRoot
-$wranglerConfig = Join-Path $root "apps\api\wrangler.jsonc"
 $migrations = @(
   (Join-Path $root "infra\migrations\001_catalog\migration.sql"),
   (Join-Path $root "infra\migrations\002_media\migration.sql"),
@@ -503,20 +502,9 @@ foreach ($migration in $migrations) {
   if (-not (Test-Path $migration)) { throw "Migration not found: $migration" }
 }
 if (-not (Test-Path $migration8)) { throw "Migration not found: $migration8" }
-if (-not (Test-Path $wranglerConfig)) { throw "Wrangler config not found: $wranglerConfig" }
 
-# Whole-line `//` comments only - a naive `//` strip would corrupt the
-# `postgresql://` scheme inside the connection string.
-$config = (Get-Content -LiteralPath $wranglerConfig) |
-  Where-Object { $_.Trim() -notlike "//*" } |
-  Out-String |
-  ConvertFrom-Json
-
-$localConnectionString = $config.hyperdrive[0].localConnectionString
-
-if (-not $localConnectionString) {
-  throw "No Hyperdrive localConnectionString found in $wranglerConfig"
-}
+. (Join-Path $root "scripts\lib\hyperdrive-local-connection.ps1")
+$localConnectionString = Get-HyperdriveLocalConnectionString
 
 $connection = [System.Uri]$localConnectionString
 $database = [System.Uri]::UnescapeDataString($connection.AbsolutePath.TrimStart("/"))
@@ -527,13 +515,13 @@ $port = $connection.Port
 # The scope guard. Anything other than the repository's own project
 # database is refused rather than quietly used.
 if ($port -ne $expectedPort) {
-  throw "REFUSED: Hyperdrive localConnectionString targets port $port; the project PostgreSQL is on $expectedPort."
+  throw "REFUSED: local connection string targets port $port; the project PostgreSQL is on $expectedPort."
 }
 if ($database -ne $expectedDatabase) {
-  throw "REFUSED: Hyperdrive localConnectionString targets database '$database'; the project database is '$expectedDatabase'."
+  throw "REFUSED: local connection string targets database '$database'; the project database is '$expectedDatabase'."
 }
 if ($targetHost -ne $expectedHost) {
-  throw "REFUSED: Hyperdrive localConnectionString targets host '$targetHost'; expected $expectedHost."
+  throw "REFUSED: local connection string targets host '$targetHost'; expected $expectedHost."
 }
 
 $running = docker ps --filter "name=^/$container$" --filter "status=running" --format "{{.Names}}"
@@ -558,7 +546,7 @@ if (-not $tcp.TcpTestSucceeded) {
 Write-Host ""
 Write-Host "=== M8 MIGRATION 008: REAL POSTGRESQL PROOF ===" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "Target (read from apps/api/wrangler.jsonc Hyperdrive localConnectionString):"
+Write-Host "Target (read from CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE):"
 Write-Host "  host=$targetHost port=$port database=$database user=$user"
 Write-Host "  container=$container"
 Write-Host "  published=$($published -join ', ')"

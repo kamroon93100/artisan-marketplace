@@ -183,7 +183,13 @@ function decodeBase64Url(value: string): Uint8Array {
  * one `requireActor` uses.
  */
 function boundaryIdentity(): IdentityService {
-  const service = getIdentityService({ APP_ENV: 'test' });
+  const service = getIdentityService(
+    {
+      APP_ENV: 'test',
+      LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+    },
+    'test',
+  );
 
   if (service === null) {
     throw new Error(
@@ -313,9 +319,20 @@ async function testTwoDistinctCredentialsResolveTwoDistinctActors(): Promise<voi
     roles: ['BUYER'],
   });
 
-  const env = { APP_ENV: 'test' };
-  const firstActor = await requireActor(env, `Bearer ${first.accessToken}`);
-  const secondActor = await requireActor(env, `Bearer ${second.accessToken}`);
+  const env = {
+    APP_ENV: 'test',
+    LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+  };
+  const firstActor = await requireActor(
+    env,
+    `Bearer ${first.accessToken}`,
+    'test',
+  );
+  const secondActor = await requireActor(
+    env,
+    `Bearer ${second.accessToken}`,
+    'test',
+  );
 
   assertEqual(
     firstActor.actorId,
@@ -347,8 +364,12 @@ async function testActorContextCarriesServerAuthoritativeRoles(): Promise<void> 
   });
 
   const actor = await requireActor(
-    { APP_ENV: 'test' },
+    {
+      APP_ENV: 'test',
+      LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+    },
     `Bearer ${session.accessToken}`,
+    'test',
   );
 
   assertEqual(
@@ -473,8 +494,13 @@ function testInvalidAndMissingCredentialsFailCorrectly(): void {
 async function testDevelopmentSeamStillWorks(): Promise<void> {
   assertEqual(
     (await requireActor(
-      { APP_ENV: 'development', DEV_OWNER_ID: 'dev-artisan' },
+      {
+        APP_ENV: 'development',
+        LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+        DEV_OWNER_ID: 'dev-artisan',
+      },
       undefined,
+      'development',
     )).actorId,
     'dev-artisan',
     'the development seam still resolves without a credential',
@@ -482,8 +508,13 @@ async function testDevelopmentSeamStillWorks(): Promise<void> {
 
   assertEqual(
     (await requireActor(
-      { APP_ENV: 'test', DEV_OWNER_ID: 'dev-artisan' },
+      {
+        APP_ENV: 'test',
+        LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+        DEV_OWNER_ID: 'dev-artisan',
+      },
       undefined,
+      'test',
     )).actorId,
     'dev-artisan',
     'the test seam still resolves without a credential',
@@ -493,8 +524,13 @@ async function testDevelopmentSeamStillWorks(): Promise<void> {
   // change that: an unrecognized credential still falls through to it.
   assertEqual(
     (await requireActor(
-      { APP_ENV: 'development', DEV_OWNER_ID: 'dev-artisan' },
+      {
+        APP_ENV: 'development',
+        LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+        DEV_OWNER_ID: 'dev-artisan',
+      },
       'Bearer not-a-real-credential',
+      'development',
     )).actorId,
     'dev-artisan',
     'an unrecognized credential still reaches the development seam',
@@ -509,8 +545,13 @@ async function testDevelopmentSeamStillWorks(): Promise<void> {
 
   assertEqual(
     (await requireActor(
-      { APP_ENV: 'development', DEV_OWNER_ID: 'dev-artisan' },
+      {
+        APP_ENV: 'development',
+        LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+        DEV_OWNER_ID: 'dev-artisan',
+      },
       `Bearer ${identitySession.accessToken}`,
+      'development',
     )).actorId,
     'actor-seam-check',
     'an identity credential beats the development seam',
@@ -624,7 +665,15 @@ async function testAccessExpiryIsEnforced(): Promise<void> {
 
   expectAppError(
     'an expired identity credential is refused by requireActor',
-    () => requireActor({ APP_ENV: 'test' }, `Bearer ${stale.accessToken}`),
+    () =>
+      requireActor(
+        {
+          APP_ENV: 'test',
+          LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+        },
+        `Bearer ${stale.accessToken}`,
+        'test',
+      ),
     'UNAUTHENTICATED',
     'Session expired.',
     // M8 error contract: one wire code, two distinguishable states.
@@ -852,8 +901,12 @@ async function testLogoutAndRevocationThroughRequireActor(): Promise<void> {
   }
 
   const stillLive = await requireActor(
-    { APP_ENV: 'test' },
+    {
+      APP_ENV: 'test',
+      LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+    },
     `Bearer ${session.accessToken}`,
+    'test',
   );
 
   assertEqual(
@@ -883,8 +936,12 @@ async function testLogoutAndRevocationThroughRequireActor(): Promise<void> {
     'a revoked session is refused by requireActor',
     () =>
       requireActor(
-        { APP_ENV: 'test' },
+        {
+          APP_ENV: 'test',
+          LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+        },
         `Bearer ${revocable.accessToken}`,
+        'test',
       ),
     'UNAUTHENTICATED',
     'Session revoked.',
@@ -996,7 +1053,14 @@ function testCredentialsNeverAppearInErrorsOrLogs(): void {
     };
 
     attempt('expired access credential', () =>
-      requireActorSync({ APP_ENV: 'test' }, `Bearer ${stale.accessToken}`),
+      requireActorSync(
+        {
+          APP_ENV: 'test',
+          LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+        },
+        `Bearer ${stale.accessToken}`,
+        'test',
+      ),
     );
     attempt('unknown credential', () =>
       requireActorSync(
@@ -1013,7 +1077,14 @@ function testCredentialsNeverAppearInErrorsOrLogs(): void {
     );
     attempt('revocation', () => {
       identity.revokeSession(live.sessionId);
-      requireActorSync({ APP_ENV: 'test' }, `Bearer ${live.accessToken}`);
+      requireActorSync(
+        {
+          APP_ENV: 'test',
+          LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+        },
+        `Bearer ${live.accessToken}`,
+        'test',
+      );
     });
 
     // Refresh and logout refusals are plain outcomes; the refusal itself
@@ -1197,6 +1268,77 @@ async function testRefreshReturnsCorrectUsername(): Promise<void> {
   );
 }
 
+async function testDevelopmentInMemoryRegisterLogoutLogin(): Promise<void> {
+  const identity = getIdentityService(
+    {
+      APP_ENV: 'development',
+      LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+    },
+    'development',
+  );
+  if (!identity) {
+    throw new Error('development identity service should be configured');
+  }
+
+  const username = `devlogin_${Math.random().toString(36).slice(2, 10)}`;
+  const password = 'validpassword123456';
+
+  const registered = await identity.register({ username, password });
+  assertEqual(
+    registered.actor.username,
+    username,
+    'development register returns the account username',
+  );
+
+  const logout = await identity.logoutAsync(registered.refreshToken);
+  assertEqual(logout.ok, true, 'development logout succeeds');
+
+  const loggedIn = await identity.login({ username, password });
+  assertEqual(
+    loggedIn.sessionId.length > 0,
+    true,
+    'development login returns a session id',
+  );
+  assertEqual(
+    loggedIn.accessToken.length > 0,
+    true,
+    'development login returns an access token',
+  );
+  assertEqual(
+    loggedIn.refreshToken.length > 0,
+    true,
+    'development login returns a refresh token',
+  );
+  assertEqual(
+    loggedIn.actor.actorId,
+    registered.actor.actorId,
+    'development login returns the registered account',
+  );
+  assertEqual(
+    loggedIn.actor.username,
+    username,
+    'development login returns the registered username',
+  );
+  assertEqual(
+    loggedIn.actor.roles.join(','),
+    'BUYER',
+    'development login returns the BUYER role',
+  );
+
+  const verified = await identity.verifyAccessTokenAsync(loggedIn.accessToken);
+  assertEqual(verified.ok, true, 'development login access token resolves');
+  if (verified.ok) {
+    assertEqual(
+      verified.actorId,
+      registered.actor.actorId,
+      'resolved session belongs to the registered account',
+    );
+    assertRoles(verified.roles, ['BUYER'], 'resolved session has the BUYER role');
+  }
+
+  console.log('✓ testDevelopmentInMemoryRegisterLogoutLogin passed');
+}
+
 async function main(): Promise<void> {
   testApprovedCredentialFormatAndLifetimes();
   testTwoDistinctCredentialsResolveTwoDistinctActors();
@@ -1213,6 +1355,7 @@ async function main(): Promise<void> {
   testAsyncMethodsExist();
   testDurableRefreshGrants();
   await testRefreshReturnsCorrectUsername();
+  await testDevelopmentInMemoryRegisterLogoutLogin();
 
   console.log('IDENTITY PHASE 1A TESTS PASSED');
 }

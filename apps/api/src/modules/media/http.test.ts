@@ -1,5 +1,10 @@
 ﻿import app from '../../index.js';
 
+// This file's HTTP fixtures cannot pass a build mode through `app.request`.
+// The suite-scoped test build matches the local happy-path environment
+// below; production call sites still omit the seam.
+process.env.NODE_ENV = 'test';
+
 const MEDIA_ROUTE_CASES = [
   {
     label: 'media request',
@@ -124,6 +129,7 @@ async function testMediaRoutesRejectAnonymousCallers(): Promise<void> {
 async function main(): Promise<void> {
   const env = {
     APP_ENV: 'test',
+    LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
     DEV_OWNER_ID: 'artisan-media-test',
   };
 

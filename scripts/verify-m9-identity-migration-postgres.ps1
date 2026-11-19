@@ -2,10 +2,14 @@ $ErrorActionPreference = "Stop"
 
 # Real-PostgreSQL proof for migration 009 - identity_refresh_grants.
 #
+# The connection string is read from the documented
+# CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE environment
+# variable, so the local database credential is never committed.
+#
 # Scope guard: this proof refuses to run against anything other than the
-# repository's own project database - the Hyperdrive localConnectionString
-# on port 55432. The native PostgreSQL listening on 5432 is a different
-# instance on this machine and is never connected to, read, or written.
+# repository's own project database - the local connection string on port
+# 55432. The native PostgreSQL listening on 5432 is a different instance on
+# this machine and is never connected to, read, or written.
 #
 # What this script proves, in order:
 #   1. the target really is the project database on 55432;
@@ -27,7 +31,6 @@ $ErrorActionPreference = "Stop"
 #      as a result of running this proof.
 
 $root = Split-Path -Parent $PSScriptRoot
-$wranglerConfig = Join-Path $root "apps\api\wrangler.jsonc"
 $migrations = @(
   (Join-Path $root "infra\migrations\001_catalog\migration.sql"),
   (Join-Path $root "infra\migrations\002_media\migration.sql"),
@@ -368,18 +371,9 @@ foreach ($migration in $migrations) {
   if (-not (Test-Path $migration)) { throw "Migration not found: $migration" }
 }
 if (-not (Test-Path $migration9)) { throw "Migration not found: $migration9" }
-if (-not (Test-Path $wranglerConfig)) { throw "Wrangler config not found: $wranglerConfig" }
 
-$config = (Get-Content -LiteralPath $wranglerConfig) |
-  Where-Object { $_.Trim() -notlike "//*" } |
-  Out-String |
-  ConvertFrom-Json
-
-$localConnectionString = $config.hyperdrive[0].localConnectionString
-
-if (-not $localConnectionString) {
-  throw "No Hyperdrive localConnectionString found in $wranglerConfig"
-}
+. (Join-Path $root "scripts\lib\hyperdrive-local-connection.ps1")
+$localConnectionString = Get-HyperdriveLocalConnectionString
 
 $connection = [System.Uri]$localConnectionString
 $database = [System.Uri]::UnescapeDataString($connection.AbsolutePath.TrimStart("/"))
@@ -388,13 +382,13 @@ $targetHost = $connection.Host
 $port = $connection.Port
 
 if ($port -ne $expectedPort) {
-  throw "REFUSED: Hyperdrive localConnectionString targets port $port; the project PostgreSQL is on $expectedPort."
+  throw "REFUSED: local connection string targets port $port; the project PostgreSQL is on $expectedPort."
 }
 if ($database -ne $expectedDatabase) {
-  throw "REFUSED: Hyperdrive localConnectionString targets database '$database'; the project database is '$expectedDatabase'."
+  throw "REFUSED: local connection string targets database '$database'; the project database is '$expectedDatabase'."
 }
 if ($targetHost -ne $expectedHost) {
-  throw "REFUSED: Hyperdrive localConnectionString targets host '$targetHost'; expected $expectedHost."
+  throw "REFUSED: local connection string targets host '$targetHost'; expected $expectedHost."
 }
 
 $running = docker ps --filter "name=^/$container$" --filter "status=running" --format "{{.Names}}"
@@ -419,7 +413,7 @@ if (-not $tcp.TcpTestSucceeded) {
 Write-Host ""
 Write-Host "=== M8 MIGRATION 009: REAL POSTGRESQL PROOF ===" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "Target (read from apps/api/wrangler.jsonc Hyperdrive localConnectionString):"
+Write-Host "Target (read from CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE):"
 Write-Host "  host=$targetHost port=$port database=$database user=$user"
 Write-Host "  container=$container"
 Write-Host "  published=$($published -join ', ')"

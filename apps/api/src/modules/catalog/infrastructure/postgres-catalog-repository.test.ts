@@ -720,6 +720,11 @@ async function testListVersionsOrdersNewestFirst(): Promise<void> {
  * `published_version` is null — invisibility before publication is a
  * property of the join rather than a filter that could be left out, and no
  * `catalog_products` listing column is selected at all.
+ *
+ * The product side of the join is the narrow published-visibility view, not
+ * the table. That is what lets row-level security deny a buyer the working
+ * row — including unpublished edits to a published product — without
+ * breaking discovery.
  */
 async function testPublishedSnapshotReadsTheVersionNotTheDraft(): Promise<void> {
   const database = new FakeDatabase();
@@ -735,6 +740,22 @@ async function testPublishedSnapshotReadsTheVersionNotTheDraft(): Promise<void> 
   if (!sql.includes('from catalog_versions v')) {
     throw new Error(
       'The published read must select from catalog_versions.',
+    );
+  }
+
+  if (
+    !sql.includes(
+      'join app.published_catalog_products p',
+    )
+  ) {
+    throw new Error(
+      'The published read must join the published-visibility view, not the catalog_products table.',
+    );
+  }
+
+  if (sql.includes('join catalog_products p')) {
+    throw new Error(
+      'The published read must not join the working product row directly.',
     );
   }
 

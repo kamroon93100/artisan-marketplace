@@ -1,4 +1,7 @@
-import { getLocalDatabase } from './database';
+import {
+  getLocalDatabase,
+  requireLocalOwnerId,
+} from './database';
 
 export const LOCAL_PRODUCT_STATES = [
   'LOCAL_ONLY',
@@ -51,7 +54,10 @@ function createLocalProductId(): string {
     .slice(2, 10)}`;
 }
 
-export async function createLocalProductDraft(): Promise<LocalProductDraft> {
+export async function createLocalProductDraft(
+  ownerId: string,
+): Promise<LocalProductDraft> {
+  const owner = requireLocalOwnerId(ownerId);
   const db = await getLocalDatabase();
   const localId = createLocalProductId();
   const now = new Date().toISOString();
@@ -60,15 +66,17 @@ export async function createLocalProductDraft(): Promise<LocalProductDraft> {
     `
       INSERT INTO local_product_drafts (
         local_id,
+        owner_id,
         remote_product_id,
         title,
         state,
         created_at,
         updated_at
       )
-      VALUES (?, NULL, NULL, 'LOCAL_ONLY', ?, ?)
+      VALUES (?, ?, NULL, NULL, 'LOCAL_ONLY', ?, ?)
     `,
     localId,
+    owner,
     now,
     now,
   );
@@ -85,8 +93,10 @@ export async function createLocalProductDraft(): Promise<LocalProductDraft> {
           updated_at
         FROM local_product_drafts
         WHERE local_id = ?
+          AND owner_id = ?
       `,
       localId,
+      owner,
     );
 
   if (!row) {
@@ -99,8 +109,10 @@ export async function createLocalProductDraft(): Promise<LocalProductDraft> {
 }
 
 export async function getLocalProductDraft(
+  ownerId: string,
   localId: string,
 ): Promise<LocalProductDraft | null> {
+  const owner = requireLocalOwnerId(ownerId);
   const db = await getLocalDatabase();
 
   const row =
@@ -115,34 +127,49 @@ export async function getLocalProductDraft(
           updated_at
         FROM local_product_drafts
         WHERE local_id = ?
+          AND owner_id = ?
       `,
       localId,
+      owner,
     );
 
   return row ? mapProductDraftRow(row) : null;
 }
 
 export async function setLocalProductRemoteId(
+  ownerId: string,
   localId: string,
   remoteProductId: string,
 ): Promise<LocalProductDraft> {
+  const owner = requireLocalOwnerId(ownerId);
   const db = await getLocalDatabase();
   const now = new Date().toISOString();
 
-  await db.runAsync(
+  const result = await db.runAsync(
     `
       UPDATE local_product_drafts
       SET
         remote_product_id = ?,
         updated_at = ?
       WHERE local_id = ?
+        AND owner_id = ?
     `,
     remoteProductId,
     now,
     localId,
+    owner,
   );
 
-  const updated = await getLocalProductDraft(localId);
+  if (result.changes !== 1) {
+    throw new Error(
+      'Local product draft does not exist.',
+    );
+  }
+
+  const updated = await getLocalProductDraft(
+    owner,
+    localId,
+  );
 
   if (!updated) {
     throw new Error(
@@ -154,16 +181,21 @@ export async function setLocalProductRemoteId(
 }
 
 export async function updateLocalProductDraft(
+  ownerId: string,
   localId: string,
   input: {
     title?: string | null;
     state?: LocalProductState;
   },
 ): Promise<LocalProductDraft> {
+  const owner = requireLocalOwnerId(ownerId);
   const db = await getLocalDatabase();
   const now = new Date().toISOString();
 
-  const existing = await getLocalProductDraft(localId);
+  const existing = await getLocalProductDraft(
+    owner,
+    localId,
+  );
 
   if (!existing) {
     throw new Error(
@@ -171,7 +203,7 @@ export async function updateLocalProductDraft(
     );
   }
 
-  await db.runAsync(
+  const result = await db.runAsync(
     `
       UPDATE local_product_drafts
       SET
@@ -179,6 +211,7 @@ export async function updateLocalProductDraft(
         state = ?,
         updated_at = ?
       WHERE local_id = ?
+        AND owner_id = ?
     `,
     input.title === undefined
       ? existing.title
@@ -186,9 +219,19 @@ export async function updateLocalProductDraft(
     input.state ?? existing.state,
     now,
     localId,
+    owner,
   );
 
-  const updated = await getLocalProductDraft(localId);
+  if (result.changes !== 1) {
+    throw new Error(
+      'Local product draft does not exist.',
+    );
+  }
+
+  const updated = await getLocalProductDraft(
+    owner,
+    localId,
+  );
 
   if (!updated) {
     throw new Error(
@@ -199,9 +242,10 @@ export async function updateLocalProductDraft(
   return updated;
 }
 
-export async function listLocalProductDrafts(): Promise<
-  LocalProductDraft[]
-> {
+export async function listLocalProductDrafts(
+  ownerId: string,
+): Promise<LocalProductDraft[]> {
+  const owner = requireLocalOwnerId(ownerId);
   const db = await getLocalDatabase();
 
   const rows =
@@ -215,8 +259,10 @@ export async function listLocalProductDrafts(): Promise<
           created_at,
           updated_at
         FROM local_product_drafts
+        WHERE owner_id = ?
         ORDER BY updated_at DESC
       `,
+      owner,
     );
 
   return rows.map(mapProductDraftRow);

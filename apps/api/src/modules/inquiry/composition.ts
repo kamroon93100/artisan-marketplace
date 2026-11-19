@@ -38,15 +38,21 @@ const inMemoryInquiryRepository =
  */
 export function getInquiryService(
   env: InquiryBindingEnv,
+  actorId?: string,
 ): InquiryService {
-  const catalog = getCatalogService(env);
+  const catalog = getCatalogService(env, actorId);
   const connectionString = resolvePostgresConnectionString(env);
 
   if (connectionString) {
+    const database = actorId
+      ? PostgresDatabase.forActor(
+          connectionString,
+          actorId,
+        )
+      : new PostgresDatabase(connectionString);
+
     return new InquiryService(
-      new PostgresInquiryRepository(
-        new PostgresDatabase(connectionString),
-      ),
+      new PostgresInquiryRepository(database),
       new CatalogServicePublishedProductPort(catalog),
     );
   }

@@ -6,9 +6,9 @@ $ErrorActionPreference = "Stop"
 # service-free fast path, and this proof needs a running database plus a
 # restart. Run this when the local stack is up.
 #
-# The connection string is read from the Hyperdrive binding in
-# wrangler.jsonc rather than duplicated here, so the local database is
-# configured in exactly one place.
+# The connection string is read from the documented
+# CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE environment
+# variable, so the local database credential is never committed.
 #
 # Migration 006 is applied before the write phase. The migration is
 # written to be re-runnable - `create table if not exists`,
@@ -21,7 +21,6 @@ $root = Split-Path -Parent $PSScriptRoot
 $tsx = Join-Path $root "node_modules\.bin\tsx.cmd"
 $testTsconfig = Join-Path $root "tests\m4-ai-pipeline\tsconfig.json"
 $suite = Join-Path $root "tests\m4-ai-pipeline\ai-pipeline-postgres-runtime.test.ts"
-$wranglerConfig = Join-Path $root "apps\api\wrangler.jsonc"
 $migration = Join-Path $root "infra\migrations\006_ai_jobs_and_proposals.sql"
 
 $container = "artisan-marketplace-postgres"
@@ -31,19 +30,8 @@ if (-not (Test-Path $tsx)) { throw "Required tool not found: $tsx" }
 if (-not (Test-Path $suite)) { throw "Test suite not found: $suite" }
 if (-not (Test-Path $migration)) { throw "Migration not found: $migration" }
 
-# Comments are stripped by dropping whole-line `//` comments only. A
-# naive `//` strip would corrupt the `postgresql://` scheme inside the
-# connection string.
-$config = (Get-Content -LiteralPath $wranglerConfig) |
-  Where-Object { $_.Trim() -notlike "//*" } |
-  Out-String |
-  ConvertFrom-Json
-
-$localConnectionString = $config.hyperdrive[0].localConnectionString
-
-if (-not $localConnectionString) {
-  throw "No Hyperdrive localConnectionString found in $wranglerConfig"
-}
+. (Join-Path $root "scripts\lib\hyperdrive-local-connection.ps1")
+$localConnectionString = Get-HyperdriveLocalConnectionString
 
 # The database and role are read from the same connection string rather than
 # repeated here, so the migration is applied to the database the tests will
@@ -63,7 +51,7 @@ Write-Host "=== M4 AI PIPELINE: REAL POSTGRESQL PROOF ===" -ForegroundColor Cyan
 
 Write-Host "[1/4] Applying migration 006"
 Get-Content -LiteralPath $migration -Raw |
-  docker exec -i $container psql -v ON_ERROR_STOP=1 -U $user -d $database 2>&1 |
+  docker exec -i $container psql -v ON_ERROR_STOP=1 -U artisan_marketplace -d $database 2>&1 |
   Out-Null
 
 if ($LASTEXITCODE -ne 0) {

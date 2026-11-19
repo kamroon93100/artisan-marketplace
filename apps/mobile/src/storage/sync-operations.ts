@@ -1,4 +1,7 @@
-import { getLocalDatabase } from './database';
+import {
+  getLocalDatabase,
+  requireLocalOwnerId,
+} from './database';
 import type {
   LocalMediaIntent,
   SyncOperation,
@@ -63,8 +66,10 @@ function mapMediaRow(
 }
 
 export async function listPendingSyncOperations(
+  ownerId: string,
   limit = 10,
 ): Promise<SyncOperation[]> {
+  const owner = requireLocalOwnerId(ownerId);
   const db = await getLocalDatabase();
   const now = new Date().toISOString();
 
@@ -83,7 +88,8 @@ export async function listPendingSyncOperations(
         created_at,
         updated_at
       FROM sync_operations
-      WHERE state = 'PENDING'
+      WHERE owner_id = ?
+        AND state = 'PENDING'
         AND (
           next_attempt_at IS NULL
           OR next_attempt_at <= ?
@@ -91,6 +97,7 @@ export async function listPendingSyncOperations(
       ORDER BY created_at ASC
       LIMIT ?
     `,
+    owner,
     now,
     limit,
   );
@@ -99,8 +106,10 @@ export async function listPendingSyncOperations(
 }
 
 export async function getLocalMediaIntent(
+  ownerId: string,
   localId: string,
 ): Promise<LocalMediaIntent | null> {
+  const owner = requireLocalOwnerId(ownerId);
   const db = await getLocalDatabase();
 
   const row = await db.getFirstAsync<Record<string, unknown>>(
@@ -120,16 +129,20 @@ export async function getLocalMediaIntent(
         updated_at
       FROM media_intents
       WHERE local_id = ?
+        AND owner_id = ?
     `,
     localId,
+    owner,
   );
 
   return row ? mapMediaRow(row) : null;
 }
 
 export async function listSyncOperationsForAggregate(
+  ownerId: string,
   aggregateId: string,
 ): Promise<SyncOperation[]> {
+  const owner = requireLocalOwnerId(ownerId);
   const db = await getLocalDatabase();
 
   const rows = await db.getAllAsync<Record<string, unknown>>(
@@ -148,17 +161,21 @@ export async function listSyncOperationsForAggregate(
         updated_at
       FROM sync_operations
       WHERE aggregate_id = ?
+        AND owner_id = ?
       ORDER BY created_at ASC
     `,
     aggregateId,
+    owner,
   );
 
   return rows.map(mapSyncRow);
 }
 
 export async function claimSyncOperation(
+  ownerId: string,
   operationId: string,
 ): Promise<SyncOperation | null> {
+  const owner = requireLocalOwnerId(ownerId);
   const db = await getLocalDatabase();
   const now = new Date().toISOString();
 
@@ -175,10 +192,12 @@ export async function claimSyncOperation(
           last_error_code = NULL,
           last_error_message = NULL
         WHERE operation_id = ?
+          AND owner_id = ?
           AND state = 'PENDING'
       `,
       now,
       operationId,
+      owner,
     );
 
     claimed = result.changes === 1;
@@ -204,8 +223,10 @@ export async function claimSyncOperation(
         updated_at
       FROM sync_operations
       WHERE operation_id = ?
+        AND owner_id = ?
     `,
     operationId,
+    owner,
   );
 
   return row ? mapSyncRow(row) : null;
@@ -224,8 +245,10 @@ export async function claimSyncOperation(
  * reclaimed, acked, or cancelled.
  */
 export async function heartbeatSyncOperation(
+  ownerId: string,
   operationId: string,
 ): Promise<void> {
+  const owner = requireLocalOwnerId(ownerId);
   const db = await getLocalDatabase();
   const now = new Date().toISOString();
 
@@ -234,18 +257,22 @@ export async function heartbeatSyncOperation(
       UPDATE sync_operations
       SET updated_at = ?
       WHERE operation_id = ?
+        AND owner_id = ?
         AND state = 'IN_FLIGHT'
     `,
     now,
     operationId,
+    owner,
   );
 }
 
 export async function markMediaSynced(
+  ownerId: string,
   localId: string,
   operationId: string,
   remoteMediaId: string,
 ): Promise<void> {
+  const owner = requireLocalOwnerId(ownerId);
   const db = await getLocalDatabase();
   const now = new Date().toISOString();
 
@@ -258,10 +285,12 @@ export async function markMediaSynced(
           remote_media_id = ?,
           updated_at = ?
         WHERE local_id = ?
+          AND owner_id = ?
       `,
       remoteMediaId,
       now,
       localId,
+      owner,
     );
 
     await txn.runAsync(
@@ -274,10 +303,12 @@ export async function markMediaSynced(
           last_error_message = NULL,
           updated_at = ?
         WHERE operation_id = ?
+          AND owner_id = ?
           AND state IN ('PENDING', 'IN_FLIGHT')
       `,
       now,
       operationId,
+      owner,
     );
   });
 }
@@ -291,10 +322,12 @@ export async function markMediaSynced(
  * instead of starting over blind.
  */
 export async function recordMediaRemoteProgress(
+  ownerId: string,
   localId: string,
   remoteMediaId: string,
   remoteState: string,
 ): Promise<void> {
+  const owner = requireLocalOwnerId(ownerId);
   const known = asRemoteMediaState(remoteState);
 
   if (!known) {
@@ -314,11 +347,13 @@ export async function recordMediaRemoteProgress(
         remote_state = ?,
         updated_at = ?
       WHERE local_id = ?
+        AND owner_id = ?
     `,
     remoteMediaId,
     known,
     now,
     localId,
+    owner,
   );
 }
 
@@ -353,10 +388,12 @@ export async function recordMediaRemoteProgress(
  * by succeeding or by writing a fresh failure.
  */
 export async function redeclareLocalMediaIntent(
+  ownerId: string,
   localId: string,
   idempotencyKey: string,
   sizeBytes: number,
 ): Promise<void> {
+  const owner = requireLocalOwnerId(ownerId);
   const db = await getLocalDatabase();
   const now = new Date().toISOString();
   const operationId = `${localId}:CREATE_MEDIA_ATTACHMENT`;
@@ -372,11 +409,13 @@ export async function redeclareLocalMediaIntent(
           remote_state = NULL,
           updated_at = ?
         WHERE local_id = ?
+          AND owner_id = ?
       `,
       sizeBytes,
       idempotencyKey,
       now,
       localId,
+      owner,
     );
 
     await txn.runAsync(
@@ -390,11 +429,13 @@ export async function redeclareLocalMediaIntent(
           updated_at = ?
         WHERE operation_id = ?
           AND aggregate_id = ?
+          AND owner_id = ?
       `,
       idempotencyKey,
       now,
       operationId,
       localId,
+      owner,
     );
   });
 }
@@ -407,10 +448,15 @@ export async function redeclareLocalMediaIntent(
  * pending query only selects PENDING rows, so a stranded IN_FLIGHT row
  * would silently strand the artisan's media. Re-running is safe because
  * every step of the lifecycle is idempotent on the server.
+ *
+ * Recovery is owner-scoped so one account's sync pass can never re-arm,
+ * inspect, or upload another account's stranded operation.
  */
 export async function recoverStaleSyncOperations(
+  ownerId: string,
   staleBefore: string,
 ): Promise<number> {
+  const owner = requireLocalOwnerId(ownerId);
   const db = await getLocalDatabase();
   const now = new Date().toISOString();
 
@@ -423,21 +469,25 @@ export async function recoverStaleSyncOperations(
         updated_at = ?
       WHERE state = 'IN_FLIGHT'
         AND updated_at <= ?
+        AND owner_id = ?
     `,
     now,
     staleBefore,
+    owner,
   );
 
   return result.changes;
 }
 
 export async function markSyncRetry(
+  ownerId: string,
   localId: string,
   operationId: string,
   errorCode: string,
   errorMessage: string,
   nextAttemptAt: string,
 ): Promise<void> {
+  const owner = requireLocalOwnerId(ownerId);
   const db = await getLocalDatabase();
   const now = new Date().toISOString();
 
@@ -449,9 +499,11 @@ export async function markSyncRetry(
           state = 'PENDING_SYNC',
           updated_at = ?
         WHERE local_id = ?
+          AND owner_id = ?
       `,
       now,
       localId,
+      owner,
     );
 
     await txn.runAsync(
@@ -464,6 +516,7 @@ export async function markSyncRetry(
           next_attempt_at = ?,
           updated_at = ?
         WHERE operation_id = ?
+          AND owner_id = ?
           AND state IN ('PENDING', 'IN_FLIGHT')
       `,
       errorCode,
@@ -471,6 +524,7 @@ export async function markSyncRetry(
       nextAttemptAt,
       now,
       operationId,
+      owner,
     );
   });
 }
@@ -487,8 +541,10 @@ export async function markSyncRetry(
  * bounded by that person's intent rather than by the automatic ceiling.
  */
 export async function retrySyncOperation(
+  ownerId: string,
   operationId: string,
 ): Promise<void> {
+  const owner = requireLocalOwnerId(ownerId);
   const db = await getLocalDatabase();
   const now = new Date().toISOString();
 
@@ -499,9 +555,11 @@ export async function retrySyncOperation(
           SELECT aggregate_id
           FROM sync_operations
           WHERE operation_id = ?
+            AND owner_id = ?
             AND state = 'ACTION_REQUIRED'
         `,
         operationId,
+        owner,
       );
 
     if (!operation) {
@@ -519,10 +577,12 @@ export async function retrySyncOperation(
           attempts = 0,
           updated_at = ?
         WHERE operation_id = ?
+          AND owner_id = ?
           AND state = 'ACTION_REQUIRED'
       `,
       now,
       operationId,
+      owner,
     );
 
     await txn.runAsync(
@@ -532,18 +592,22 @@ export async function retrySyncOperation(
           state = 'PENDING_SYNC',
           updated_at = ?
         WHERE local_id = ?
+          AND owner_id = ?
       `,
       now,
       String(operation.aggregate_id),
+      owner,
     );
   });
 }
 export async function markSyncActionRequired(
+  ownerId: string,
   localId: string,
   operationId: string,
   errorCode: string,
   errorMessage: string,
 ): Promise<void> {
+  const owner = requireLocalOwnerId(ownerId);
   const db = await getLocalDatabase();
   const now = new Date().toISOString();
 
@@ -555,9 +619,11 @@ export async function markSyncActionRequired(
           state = 'ACTION_REQUIRED',
           updated_at = ?
         WHERE local_id = ?
+          AND owner_id = ?
       `,
       now,
       localId,
+      owner,
     );
 
     await txn.runAsync(
@@ -570,15 +636,14 @@ export async function markSyncActionRequired(
           next_attempt_at = NULL,
           updated_at = ?
         WHERE operation_id = ?
+          AND owner_id = ?
           AND state IN ('PENDING', 'IN_FLIGHT')
       `,
       errorCode,
       errorMessage,
       now,
       operationId,
+      owner,
     );
   });
 }
-
-
-

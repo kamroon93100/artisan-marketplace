@@ -34,6 +34,7 @@ function allowsInMemoryRepository(
 
 export function getMediaService(
   env: MediaBindingEnv,
+  actorId?: string,
 ): MediaService {
   const connectionString =
     resolvePostgresConnectionString(env);
@@ -50,12 +51,15 @@ export function getMediaService(
   }
 
   const catalogService =
-    getCatalogService(env);
+    getCatalogService(env, actorId);
 
   if (connectionString) {
-    const database = new PostgresDatabase(
-      connectionString,
-    );
+    const database = actorId
+      ? PostgresDatabase.forActor(
+          connectionString,
+          actorId,
+        )
+      : new PostgresDatabase(connectionString);
 
     return new MediaService(
       new PostgresMediaRepository(database),

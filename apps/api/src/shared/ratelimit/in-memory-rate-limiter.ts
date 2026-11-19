@@ -80,4 +80,11 @@ export class InMemorySlidingWindowRateLimiter
       resetAt,
     };
   }
+
+  /**
+   * Clears all rate-limit state. Intended for test isolation only.
+   */
+  reset(): void {
+    this.windows.clear();
+  }
 }

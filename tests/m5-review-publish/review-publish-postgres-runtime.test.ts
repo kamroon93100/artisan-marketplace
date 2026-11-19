@@ -76,7 +76,7 @@ if (!connectionString) {
  * is cached between calls, and the `read` phase builds its own services:
  * there is no in-process object that could answer a read from memory.
  */
-function freshRigs(): {
+function freshRigs(actorId: string): {
   database: PostgresDatabase;
   aiRepository: PostgresAiRepository;
   catalogService: CatalogService;
@@ -84,7 +84,7 @@ function freshRigs(): {
   aiReview: AiReviewService;
   review: ReviewService;
 } {
-  const database = new PostgresDatabase(connectionString!);
+  const database = PostgresDatabase.forActor(connectionString!, actorId);
   const aiRepository = new PostgresAiRepository(database);
   const catalogService = new CatalogService(
     new PostgresCatalogRepository(database),
@@ -122,7 +122,7 @@ async function writePhase(handoffPath: string): Promise<void> {
   const ownerId = randomUUID();
   const otherOwnerId = randomUUID();
   const { aiRepository, catalogService, pipeline, aiReview, review } =
-    freshRigs();
+    freshRigs(ownerId);
 
   // A1: the realistic starting point. An artisan has a synced product with a
   // title and no description, and asks for help with the rest.
@@ -512,7 +512,7 @@ async function readPhase(handoffPath: string): Promise<void> {
     readFileSync(handoffPath, "utf8"),
   ) as Handoff;
   const { database, aiRepository, catalogService, aiReview, review } =
-    freshRigs();
+    freshRigs(handoff.ownerId);
 
   // B1: the published listing is buyer-visible and still exactly what was
   // authorized. Nothing in the read process was holding any of this.

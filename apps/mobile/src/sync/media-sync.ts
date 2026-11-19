@@ -173,6 +173,7 @@ async function resolveMeasuredDeclaration(
   );
 
   await redeclareLocalMediaIntent(
+    deps.ownerId,
     intent.localId,
     idempotencyKey,
     measured,
@@ -188,6 +189,13 @@ async function resolveMeasuredDeclaration(
 }
 
 type MediaSyncDeps = {
+  /**
+   * The authenticated account whose queue this run may touch. Every
+   * storage read and write below is scoped to it, so a sync triggered by
+   * one artisan can never claim, inspect, or upload another artisan's
+   * queued work.
+   */
+  ownerId: string;
   transport: MediaSyncTransport;
   uploader: ByteUploader;
   /**
@@ -251,6 +259,7 @@ async function uploadMedia(
     );
 
   await recordMediaRemoteProgress(
+    deps.ownerId,
     measured.localId,
     mediaId,
     authorization.remoteState,
@@ -262,6 +271,7 @@ async function uploadMedia(
   );
 
   await recordMediaRemoteProgress(
+    deps.ownerId,
     measured.localId,
     mediaId,
     started.remoteState,
@@ -295,9 +305,10 @@ async function uploadMedia(
         // The write is intentionally not awaited: the progress
         // callback must not block the byte stream, and a failed
         // heartbeat is recoverable because the next one retries.
-        void heartbeatSyncOperation(operationId).catch(
-          () => undefined,
-        );
+        void heartbeatSyncOperation(
+          deps.ownerId,
+          operationId,
+        ).catch(() => undefined);
       }
 
       deps.onProgress?.(measured.localId, progress);
@@ -315,6 +326,7 @@ async function uploadMedia(
     // outcome, so the local record does not keep claiming the upload is
     // still in progress after the server rejected it.
     await recordMediaRemoteProgress(
+      deps.ownerId,
       measured.localId,
       mediaId,
       completion.remoteState,
@@ -334,6 +346,7 @@ async function uploadMedia(
 
   if (completion.remoteState !== 'VERIFIED') {
     await recordMediaRemoteProgress(
+      deps.ownerId,
       measured.localId,
       mediaId,
       completion.remoteState,
@@ -349,12 +362,14 @@ async function uploadMedia(
   }
 
   await recordMediaRemoteProgress(
+    deps.ownerId,
     measured.localId,
     mediaId,
     completion.remoteState,
   );
 
   await markMediaSynced(
+    deps.ownerId,
     measured.localId,
     operationId,
     mediaId,
@@ -362,6 +377,7 @@ async function uploadMedia(
 }
 
 export async function syncPendingMedia(
+  ownerId: string,
   transport: MediaSyncTransport,
   uploader: ByteUploader,
   limit = 10,
@@ -370,6 +386,7 @@ export async function syncPendingMedia(
   sizeProbe: LocalFileSizeProbe = unmeasuredLocalFile,
 ): Promise<MediaSyncResult> {
   const deps: MediaSyncDeps = {
+    ownerId,
     transport,
     uploader,
     sizeProbe,
@@ -378,12 +395,18 @@ export async function syncPendingMedia(
   };
 
   // Recover work stranded by a previous run before selecting new work,
-  // otherwise an interrupted upload would never be retried.
+  // otherwise an interrupted upload would never be retried. Recovery is
+  // scoped to this account so another account's in-flight work is left
+  // exactly as it was.
   await recoverStaleSyncOperations(
+    ownerId,
     new Date(Date.now() - IN_FLIGHT_STALE_MS).toISOString(),
   );
 
-  const operations = await listPendingSyncOperations(limit);
+  const operations = await listPendingSyncOperations(
+    ownerId,
+    limit,
+  );
 
   const result: MediaSyncResult = {
     processed: 0,
@@ -396,6 +419,7 @@ export async function syncPendingMedia(
     result.processed += 1;
 
     const claimed = await claimSyncOperation(
+      ownerId,
       operation.operationId,
     );
 
@@ -404,11 +428,13 @@ export async function syncPendingMedia(
     }
 
     const intent = await getLocalMediaIntent(
+      ownerId,
       claimed.aggregateId,
     );
 
     if (!intent) {
       await markSyncActionRequired(
+        ownerId,
         claimed.aggregateId,
         claimed.operationId,
         'LOCAL_DATA_MISSING',
@@ -420,11 +446,13 @@ export async function syncPendingMedia(
     }
 
     const draft = await getLocalProductDraft(
+      ownerId,
       intent.productId,
     );
 
     if (!draft?.remoteProductId) {
       await markSyncActionRequired(
+        ownerId,
         intent.localId,
         claimed.operationId,
         'PRODUCT_NOT_SYNCED',
@@ -468,6 +496,7 @@ export async function syncPendingMedia(
          */
         if (claimed.attempts >= MAX_SYNC_ATTEMPTS) {
           await markSyncActionRequired(
+            ownerId,
             intent.localId,
             claimed.operationId,
             RETRY_LIMIT_EXCEEDED,
@@ -482,6 +511,7 @@ export async function syncPendingMedia(
         }
 
         await markSyncRetry(
+          ownerId,
           intent.localId,
           claimed.operationId,
           error.code,
@@ -499,6 +529,7 @@ export async function syncPendingMedia(
           : 'SYNC_FAILED';
 
       await markSyncActionRequired(
+        ownerId,
         intent.localId,
         claimed.operationId,
         code,

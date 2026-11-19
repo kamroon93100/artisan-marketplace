@@ -3,8 +3,9 @@ import type { Context } from 'hono';
 import type { ApiEnv } from '../../shared/context/api-env.js';
 import { requireActor } from '../../shared/auth/session.js';
 import {
-  inquiryCreateLimiter,
-  rateLimitMiddleware,
+  enforceRateLimit,
+  resolveOperationRateLimiters,
+  buildOperationKey,
 } from '../../shared/ratelimit/index.js';
 import { getInquiryService } from './composition.js';
 import { InquiryValidationError } from './domain/inquiry.js';
@@ -88,7 +89,7 @@ function toValidationResponse(
 inquiryRoutes.get('/inquiries', async (c) => {
   try {
     return c.json(
-      await getInquiryService(c.env).listOwn(actorId(c), {
+      await getInquiryService(c.env, actorId(c)).listOwn(actorId(c), {
         limit: c.req.query('limit'),
         offset: c.req.query('offset'),
       }),
@@ -113,6 +114,7 @@ inquiryRoutes.get('/inquiries/:inquiryId', async (c) => {
   return c.json({
     inquiry: await getInquiryService(
       c.env,
+      actorId(c),
     ).getOwn(routeInquiryId(c), actorId(c)),
   });
 });
@@ -132,8 +134,14 @@ inquiryRoutes.get('/inquiries/:inquiryId', async (c) => {
  */
 inquiryRoutes.post(
   '/inquiries',
-  rateLimitMiddleware(inquiryCreateLimiter, 'inquiry creation'),
   async (c) => {
+    const limiters = resolveOperationRateLimiters(c.env);
+    await enforceRateLimit(
+      c,
+      limiters['inquiry.create'],
+      buildOperationKey('inquiry.create', actorId(c)),
+      'inquiry creation',
+    );
     const idempotencyKey = c.req.header('idempotency-key');
 
     if (!idempotencyKey?.trim()) {
@@ -172,6 +180,7 @@ inquiryRoutes.post(
     try {
       const result = await getInquiryService(
         c.env,
+        actorId(c),
       ).create({
         productId: body.productId,
         message: body.message,

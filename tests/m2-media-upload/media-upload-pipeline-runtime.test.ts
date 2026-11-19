@@ -33,6 +33,7 @@ import type {
   ByteUploadRequest,
 } from "../../apps/mobile/src/sync/byte-uploader.ts";
 
+const OWNER = "artisan-owner-1";
 const SECRET_FRAGMENT = "X-Amz-Signature=deadbeef";
 
 type Calls = {
@@ -209,14 +210,14 @@ async function seedMedia(): Promise<{
 }> {
   sequence += 1;
 
-  const draft = await setLocalProductRemoteId(
-    (await createLocalProductDraft()).localId,
+  const draft = await setLocalProductRemoteId(OWNER,
+    (await createLocalProductDraft(OWNER)).localId,
     `remote-product-${sequence}`,
   );
 
   assert.ok(draft.remoteProductId);
 
-  const media = await createLocalMediaIntent({
+  const media = await createLocalMediaIntent(OWNER, {
     localId: `pipeline-media-${sequence}`,
     productId: draft.localId,
     kind: "IMAGE",
@@ -241,7 +242,7 @@ async function testHappyPath(): Promise<void> {
   const uploader = new RecordingUploader();
   const progress: Array<{ bytesSent: number; totalBytes: number }> = [];
 
-  const result = await syncPendingMedia(
+  const result = await syncPendingMedia(OWNER,
     server,
     uploader,
     10,
@@ -276,7 +277,7 @@ async function testHappyPath(): Promise<void> {
   assert.equal(progress.length, 1);
   assert.equal(progress[0]?.bytesSent, 2048);
 
-  const stored = await getLocalMediaIntent(localId);
+  const stored = await getLocalMediaIntent(OWNER, localId);
 
   assert.ok(stored);
   assert.equal(stored.state, "SYNCED");
@@ -286,7 +287,7 @@ async function testHappyPath(): Promise<void> {
     `remote-pipeline:${sequence}`,
   );
 
-  const operation = await getSyncOperation(operationId);
+  const operation = await getSyncOperation(OWNER, operationId);
 
   assert.ok(operation);
   assert.equal(operation.state, "ACKED");
@@ -309,13 +310,13 @@ async function testRefusedUploadRetries(): Promise<void> {
     true,
   );
 
-  const result = await syncPendingMedia(server, uploader);
+  const result = await syncPendingMedia(OWNER, server, uploader);
 
   assert.equal(result.retried, 1);
   assert.equal(result.succeeded, 0);
   assert.equal(result.actionRequired, 0);
 
-  const stored = await getLocalMediaIntent(localId);
+  const stored = await getLocalMediaIntent(OWNER, localId);
 
   assert.ok(stored);
   assert.notEqual(
@@ -325,7 +326,7 @@ async function testRefusedUploadRetries(): Promise<void> {
   );
   assert.equal(stored.state, "PENDING_SYNC");
 
-  const operation = await getSyncOperation(operationId);
+  const operation = await getSyncOperation(OWNER, operationId);
 
   assert.ok(operation);
   assert.equal(operation.state, "PENDING");
@@ -339,7 +340,7 @@ async function testRefusedUploadRetries(): Promise<void> {
   );
 
   // The retry is deferred by backoff rather than spinning.
-  const tooSoon = await syncPendingMedia(server, uploader);
+  const tooSoon = await syncPendingMedia(OWNER, server, uploader);
 
   assert.equal(
     tooSoon.processed,
@@ -356,7 +357,7 @@ async function testRefusedUploadRetries(): Promise<void> {
   // the failed attempt are reused rather than starting a new record.
   uploader.error = null;
 
-  const retried = await syncPendingMedia(server, uploader);
+  const retried = await syncPendingMedia(OWNER, server, uploader);
 
   assert.equal(retried.succeeded, 1);
   assert.equal(
@@ -410,7 +411,7 @@ async function testRetriesStopAtAttemptThreshold(): Promise<void> {
     const deadline = Date.now() + 40_000;
 
     while (Date.now() < deadline) {
-      const pending = await listPendingSyncOperations(50);
+      const pending = await listPendingSyncOperations(OWNER, 50);
 
       if (
         pending.some(
@@ -449,14 +450,14 @@ async function testRetriesStopAtAttemptThreshold(): Promise<void> {
   ) {
     await waitUntilOffered();
 
-    const result = await syncPendingMedia(server, uploader);
+    const result = await syncPendingMedia(OWNER, server, uploader);
 
     assert.ok(
       result.processed >= 1,
       `attempt ${attempt} is picked up`,
     );
 
-    const operation = await getSyncOperation(operationId);
+    const operation = await getSyncOperation(OWNER, operationId);
 
     assert.ok(operation);
     assert.equal(
@@ -479,7 +480,7 @@ async function testRetriesStopAtAttemptThreshold(): Promise<void> {
       `attempt ${attempt} keeps the underlying cause`,
     );
 
-    const stored = await getLocalMediaIntent(localId);
+    const stored = await getLocalMediaIntent(OWNER, localId);
 
     assert.ok(stored);
     assert.equal(
@@ -492,9 +493,9 @@ async function testRetriesStopAtAttemptThreshold(): Promise<void> {
   // The attempt at the threshold stops retrying and escalates.
   await waitUntilOffered();
 
-  await syncPendingMedia(server, uploader);
+  await syncPendingMedia(OWNER, server, uploader);
 
-  const escalated = await getSyncOperation(operationId);
+  const escalated = await getSyncOperation(OWNER, operationId);
 
   assert.ok(escalated);
   assert.equal(
@@ -518,7 +519,7 @@ async function testRetriesStopAtAttemptThreshold(): Promise<void> {
     "the exhausted budget is recorded explicitly",
   );
 
-  const stored = await getLocalMediaIntent(localId);
+  const stored = await getLocalMediaIntent(OWNER, localId);
 
   assert.ok(stored);
   assert.equal(
@@ -565,7 +566,7 @@ async function testRetriesStopAtAttemptThreshold(): Promise<void> {
   );
 
   // It stays escalated: nothing retries it on its own.
-  const afterEscalation = await syncPendingMedia(
+  const afterEscalation = await syncPendingMedia(OWNER,
     server,
     uploader,
   );
@@ -578,9 +579,9 @@ async function testRetriesStopAtAttemptThreshold(): Promise<void> {
 
   // The artisan's explicit retry re-arms the operation and the media
   // still uploads, so escalating did not strand or lose it.
-  await retrySyncOperation(operationId);
+  await retrySyncOperation(OWNER, operationId);
 
-  const rearmed = await getSyncOperation(operationId);
+  const rearmed = await getSyncOperation(OWNER, operationId);
 
   assert.ok(rearmed);
   assert.equal(
@@ -601,7 +602,7 @@ async function testRetriesStopAtAttemptThreshold(): Promise<void> {
 
   uploader.error = null;
 
-  const recovered = await syncPendingMedia(server, uploader);
+  const recovered = await syncPendingMedia(OWNER, server, uploader);
 
   assert.equal(
     recovered.succeeded,
@@ -609,12 +610,12 @@ async function testRetriesStopAtAttemptThreshold(): Promise<void> {
     "an explicit retry recovers the upload",
   );
   assert.equal(
-    (await getSyncOperation(operationId))?.state,
+    (await getSyncOperation(OWNER, operationId))?.state,
     "ACKED",
     "the recovered operation is acknowledged",
   );
   assert.equal(
-    (await getLocalMediaIntent(localId))?.state,
+    (await getLocalMediaIntent(OWNER, localId))?.state,
     "SYNCED",
     "the recovered media is synced",
   );
@@ -638,13 +639,13 @@ async function testFailedVerificationIsNotSynced(): Promise<void> {
   server.remoteStateOnCompletion = "FAILED";
   server.completionFailureCode = "OBJECT_SIZE_MISMATCH";
 
-  const result = await syncPendingMedia(server, uploader);
+  const result = await syncPendingMedia(OWNER, server, uploader);
 
   // The object can be rewritten on the same key, so it stays retryable.
   assert.equal(result.retried, 1);
   assert.equal(result.succeeded, 0);
 
-  const stored = await getLocalMediaIntent(localId);
+  const stored = await getLocalMediaIntent(OWNER, localId);
 
   assert.ok(stored);
   assert.notEqual(
@@ -669,12 +670,12 @@ async function testUnexpectedVerifiedStateIsActionRequired(): Promise<
   server.verified = true;
   server.remoteStateOnCompletion = "UPLOADED";
 
-  const result = await syncPendingMedia(server, uploader);
+  const result = await syncPendingMedia(OWNER, server, uploader);
 
   assert.equal(result.actionRequired, 1);
   assert.equal(result.succeeded, 0);
 
-  const stored = await getLocalMediaIntent(localId);
+  const stored = await getLocalMediaIntent(OWNER, localId);
 
   assert.ok(stored);
   assert.equal(stored.state, "ACTION_REQUIRED");
@@ -692,11 +693,11 @@ async function testNonRetryableIsActionRequired(): Promise<void> {
     false,
   );
 
-  const result = await syncPendingMedia(server, uploader);
+  const result = await syncPendingMedia(OWNER, server, uploader);
 
   assert.equal(result.actionRequired, 1);
 
-  const stored = await getLocalMediaIntent(localId);
+  const stored = await getLocalMediaIntent(OWNER, localId);
 
   assert.ok(stored);
   assert.equal(stored.state, "ACTION_REQUIRED");
@@ -707,8 +708,8 @@ async function testNonRetryableIsActionRequired(): Promise<void> {
  * is a real problem the artisan must see rather than an endless retry.
  */
 async function testUnsyncedProductIsActionRequired(): Promise<void> {
-  const draft = await createLocalProductDraft();
-  const media = await createLocalMediaIntent({
+  const draft = await createLocalProductDraft(OWNER);
+  const media = await createLocalMediaIntent(OWNER, {
     localId: `pipeline-unsynced-${++sequence}`,
     productId: draft.localId,
     kind: "IMAGE",
@@ -718,12 +719,12 @@ async function testUnsyncedProductIsActionRequired(): Promise<void> {
     idempotencyKey: `pipeline:unsynced:${sequence}`,
   });
 
-  const result = await syncPendingMedia(
+  const result = await syncPendingMedia(OWNER,
     new ScriptedServer(),
     new RecordingUploader(),
   );
 
-  const operation = await getSyncOperation(
+  const operation = await getSyncOperation(OWNER,
     `${media.localId}:CREATE_MEDIA_ATTACHMENT`,
   );
 
@@ -742,7 +743,7 @@ async function testResumeAfterInterruption(): Promise<void> {
   const server = new ScriptedServer();
   const uploader = new RecordingUploader();
 
-  await markSyncActionRequired(
+  await markSyncActionRequired(OWNER,
     localId,
     operationId,
     "INTERRUPTED",
@@ -753,13 +754,13 @@ async function testResumeAfterInterruption(): Promise<void> {
     "../../apps/mobile/src/storage/sync-operations.ts"
   );
 
-  await retrySyncOperation(operationId);
+  await retrySyncOperation(OWNER, operationId);
 
-  const result = await syncPendingMedia(server, uploader);
+  const result = await syncPendingMedia(OWNER, server, uploader);
 
   assert.equal(result.succeeded, 1);
 
-  const stored = await getLocalMediaIntent(localId);
+  const stored = await getLocalMediaIntent(OWNER, localId);
 
   assert.ok(stored);
   assert.equal(stored.state, "SYNCED");
@@ -779,9 +780,9 @@ async function testNoCredentialIsPersisted(): Promise<void> {
   const server = new ScriptedServer();
   const uploader = new RecordingUploader();
 
-  await syncPendingMedia(server, uploader);
+  await syncPendingMedia(OWNER, server, uploader);
 
-  const stored = await getLocalMediaIntent(localId);
+  const stored = await getLocalMediaIntent(OWNER, localId);
 
   assert.ok(stored);
 
@@ -805,11 +806,11 @@ async function testAcknowledgedWorkIsNotRepeated(): Promise<void> {
   const server = new ScriptedServer();
   const uploader = new RecordingUploader();
 
-  const first = await syncPendingMedia(server, uploader);
+  const first = await syncPendingMedia(OWNER, server, uploader);
 
   assert.equal(first.succeeded, 1);
 
-  const second = await syncPendingMedia(server, uploader);
+  const second = await syncPendingMedia(OWNER, server, uploader);
 
   assert.equal(second.processed, 0);
   assert.equal(server.calls.created.length, 1);
@@ -828,15 +829,15 @@ async function testHeartbeatCannotResurrectSettledWork(): Promise<void> {
     await import("../../apps/mobile/src/storage/sync-operations.ts");
 
   // An acknowledged operation must not be revived.
-  await syncPendingMedia(new ScriptedServer(), new RecordingUploader());
+  await syncPendingMedia(OWNER, new ScriptedServer(), new RecordingUploader());
 
-  const acked = await getSyncOperation(operationId);
+  const acked = await getSyncOperation(OWNER, operationId);
 
   assert.equal(acked?.state, "ACKED");
 
-  await heartbeatSyncOperation(operationId);
+  await heartbeatSyncOperation(OWNER, operationId);
 
-  const stillAcked = await getSyncOperation(operationId);
+  const stillAcked = await getSyncOperation(OWNER, operationId);
 
   assert.equal(
     stillAcked?.state,
@@ -852,16 +853,16 @@ async function testHeartbeatCannotResurrectSettledWork(): Promise<void> {
   // An operation set aside for the artisan must not be revived either.
   const second = await seedMedia();
 
-  await markSyncActionRequired(
+  await markSyncActionRequired(OWNER,
     second.localId,
     second.operationId,
     "MANUAL",
     "Waiting for the artisan.",
   );
 
-  await heartbeatSyncOperation(second.operationId);
+  await heartbeatSyncOperation(OWNER, second.operationId);
 
-  const setAside = await getSyncOperation(second.operationId);
+  const setAside = await getSyncOperation(OWNER, second.operationId);
 
   assert.equal(
     setAside?.state,
@@ -874,13 +875,13 @@ async function testHeartbeatCannotResurrectSettledWork(): Promise<void> {
   const third = await seedMedia();
 
   assert.equal(
-    (await getSyncOperation(third.operationId))?.state,
+    (await getSyncOperation(OWNER, third.operationId))?.state,
     "PENDING",
   );
 
-  await heartbeatSyncOperation(third.operationId);
+  await heartbeatSyncOperation(OWNER, third.operationId);
 
-  const pending = await getSyncOperation(third.operationId);
+  const pending = await getSyncOperation(OWNER, third.operationId);
 
   assert.equal(
     pending?.state,
@@ -911,7 +912,7 @@ async function testLongUploadIsNotStolenWhileInFlight(): Promise<void> {
   // heartbeat could have run.
   uploader.afterFirstProgress = async () => {
     claimBeforeHeartbeat = (
-      await getSyncOperation(operationId)
+      await getSyncOperation(OWNER, operationId)
     )?.updatedAt ?? "";
   };
 
@@ -920,7 +921,7 @@ async function testLongUploadIsNotStolenWhileInFlight(): Promise<void> {
       "../../apps/mobile/src/storage/sync-operations.ts"
     );
 
-    const inFlight = await getSyncOperation(operationId);
+    const inFlight = await getSyncOperation(OWNER, operationId);
 
     assert.equal(
       inFlight?.state,
@@ -938,7 +939,7 @@ async function testLongUploadIsNotStolenWhileInFlight(): Promise<void> {
       "a long upload refreshes its claim instead of going stale",
     );
 
-    const pending = await listPendingSyncOperations(10);
+    const pending = await listPendingSyncOperations(OWNER, 10);
 
     assert.equal(
       pending.filter(
@@ -949,7 +950,7 @@ async function testLongUploadIsNotStolenWhileInFlight(): Promise<void> {
     );
   };
 
-  const result = await syncPendingMedia(
+  const result = await syncPendingMedia(OWNER,
     server,
     uploader,
     10,
@@ -959,7 +960,7 @@ async function testLongUploadIsNotStolenWhileInFlight(): Promise<void> {
 
   assert.equal(result.succeeded, 1);
 
-  const stored = await getLocalMediaIntent(localId);
+  const stored = await getLocalMediaIntent(OWNER, localId);
 
   assert.equal(stored?.state, "SYNCED");
   // Scoped to this media record: the run may also pick up unrelated
@@ -1011,8 +1012,8 @@ async function seedStaleMedia(
 }> {
   sequence += 1;
 
-  const draft = await setLocalProductRemoteId(
-    (await createLocalProductDraft()).localId,
+  const draft = await setLocalProductRemoteId(OWNER,
+    (await createLocalProductDraft(OWNER)).localId,
     `remote-product-${sequence}`,
   );
 
@@ -1021,7 +1022,7 @@ async function seedStaleMedia(
   const localId = `pipeline-stale-${sequence}`;
   const originalIdempotencyKey = `pipeline:stale:${sequence}`;
 
-  const media = await createLocalMediaIntent({
+  const media = await createLocalMediaIntent(OWNER, {
     localId,
     productId: draft.localId,
     kind: "IMAGE",
@@ -1033,7 +1034,7 @@ async function seedStaleMedia(
 
   const declaredRemoteMediaId = `remote-stale-${sequence}`;
 
-  await recordMediaRemoteProgress(
+  await recordMediaRemoteProgress(OWNER,
     localId,
     declaredRemoteMediaId,
     "UPLOAD_AUTHORIZED",
@@ -1073,7 +1074,7 @@ async function testStaleDeclarationIsRedeclaredAgainstTheRealFile(): Promise<voi
   const server = new ScriptedServer();
   const uploader = new RecordingUploader();
 
-  const result = await syncPendingMedia(
+  const result = await syncPendingMedia(OWNER,
     server,
     uploader,
     10,
@@ -1121,7 +1122,7 @@ async function testStaleDeclarationIsRedeclaredAgainstTheRealFile(): Promise<voi
   assert.equal(uploader.requests.length, 1);
   assert.equal(uploader.requests[0]!.uri, uri);
 
-  const stored = await getLocalMediaIntent(localId);
+  const stored = await getLocalMediaIntent(OWNER, localId);
 
   assert.ok(stored);
   assert.equal(stored.sizeBytes, 33_740);
@@ -1138,7 +1139,7 @@ async function testStaleDeclarationIsRedeclaredAgainstTheRealFile(): Promise<voi
     "the abandoned record must not remain bound locally",
   );
 
-  const operation = await getSyncOperation(operationId);
+  const operation = await getSyncOperation(OWNER, operationId);
 
   assert.ok(operation);
   assert.equal(
@@ -1176,7 +1177,7 @@ async function testCorrectedDeclarationConvergesOnOneRecord(): Promise<void> {
     false,
   );
 
-  const first = await syncPendingMedia(
+  const first = await syncPendingMedia(OWNER,
     server,
     new RecordingUploader(),
     10,
@@ -1188,7 +1189,7 @@ async function testCorrectedDeclarationConvergesOnOneRecord(): Promise<void> {
   assert.equal(first.actionRequired, 1);
   assert.equal(first.retried, 0);
 
-  const afterFirst = await getLocalMediaIntent(localId);
+  const afterFirst = await getLocalMediaIntent(OWNER, localId);
 
   assert.ok(afterFirst);
   assert.equal(
@@ -1198,11 +1199,11 @@ async function testCorrectedDeclarationConvergesOnOneRecord(): Promise<void> {
   );
   assert.equal(afterFirst.idempotencyKey, correctedKey);
 
-  await retrySyncOperation(operationId);
+  await retrySyncOperation(OWNER, operationId);
 
   server.completionError = null;
 
-  const second = await syncPendingMedia(
+  const second = await syncPendingMedia(OWNER,
     server,
     new RecordingUploader(),
     10,
@@ -1231,7 +1232,7 @@ async function testCorrectedDeclarationConvergesOnOneRecord(): Promise<void> {
     "both attempts act on the same record",
   );
 
-  const stored = await getLocalMediaIntent(localId);
+  const stored = await getLocalMediaIntent(OWNER, localId);
 
   assert.ok(stored);
   assert.equal(stored.sizeBytes, 33_740);
@@ -1250,7 +1251,7 @@ async function testCorrectDeclarationKeepsItsServerRecord(): Promise<void> {
 
   const server = new ScriptedServer();
 
-  const result = await syncPendingMedia(
+  const result = await syncPendingMedia(OWNER,
     server,
     new RecordingUploader(),
     10,
@@ -1268,7 +1269,7 @@ async function testCorrectDeclarationKeepsItsServerRecord(): Promise<void> {
   assert.deepEqual(server.calls.authorized, [declaredRemoteMediaId]);
   assert.deepEqual(server.calls.completed, [declaredRemoteMediaId]);
 
-  const stored = await getLocalMediaIntent(localId);
+  const stored = await getLocalMediaIntent(OWNER, localId);
 
   assert.ok(stored);
   assert.equal(stored.sizeBytes, 2_048);
@@ -1289,7 +1290,7 @@ async function testUnmeasurableFileLeavesTheRecordAlone(): Promise<void> {
 
   const server = new ScriptedServer();
 
-  const result = await syncPendingMedia(
+  const result = await syncPendingMedia(OWNER,
     server,
     new RecordingUploader(),
     10,
@@ -1306,7 +1307,7 @@ async function testUnmeasurableFileLeavesTheRecordAlone(): Promise<void> {
   );
   assert.deepEqual(server.calls.authorized, [declaredRemoteMediaId]);
 
-  const stored = await getLocalMediaIntent(localId);
+  const stored = await getLocalMediaIntent(OWNER, localId);
 
   assert.ok(stored);
   assert.equal(

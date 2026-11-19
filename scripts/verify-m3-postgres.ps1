@@ -7,15 +7,14 @@ $ErrorActionPreference = "Stop"
 # service-free fast path, and this proof needs a running database plus a
 # restart. Run this when the local stack is up.
 #
-# The connection string is read from the Hyperdrive binding in
-# wrangler.jsonc rather than duplicated here, so the local database is
-# configured in exactly one place.
+# The connection string is read from the documented
+# CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE environment
+# variable, so the local database credential is never committed.
 
 $root = Split-Path -Parent $PSScriptRoot
 $tsx = Join-Path $root "node_modules\.bin\tsx.cmd"
 $testTsconfig = Join-Path $root "tests\m3-catalog-lifecycle\tsconfig.json"
 $suite = Join-Path $root "tests\m3-catalog-lifecycle\catalog-lifecycle-postgres-runtime.test.ts"
-$wranglerConfig = Join-Path $root "apps\api\wrangler.jsonc"
 
 $container = "artisan-marketplace-postgres"
 $handoff = Join-Path ([System.IO.Path]::GetTempPath()) "m3-catalog-lifecycle-handoff.json"
@@ -23,19 +22,8 @@ $handoff = Join-Path ([System.IO.Path]::GetTempPath()) "m3-catalog-lifecycle-han
 if (-not (Test-Path $tsx)) { throw "Required tool not found: $tsx" }
 if (-not (Test-Path $suite)) { throw "Test suite not found: $suite" }
 
-# Comments are stripped by dropping whole-line `//` comments only. A
-# naive `//` strip would corrupt the `postgresql://` scheme inside the
-# connection string.
-$config = (Get-Content -LiteralPath $wranglerConfig) |
-  Where-Object { $_.Trim() -notlike "//*" } |
-  Out-String |
-  ConvertFrom-Json
-
-$localConnectionString = $config.hyperdrive[0].localConnectionString
-
-if (-not $localConnectionString) {
-  throw "No Hyperdrive localConnectionString found in $wranglerConfig"
-}
+. (Join-Path $root "scripts\lib\hyperdrive-local-connection.ps1")
+$localConnectionString = Get-HyperdriveLocalConnectionString
 
 $running = docker ps --filter "name=^/$container$" --filter "status=running" --format "{{.Names}}"
 

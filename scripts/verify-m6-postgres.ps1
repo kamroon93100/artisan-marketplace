@@ -6,16 +6,16 @@ $ErrorActionPreference = "Stop"
 # service-free fast path, and this proof needs a running database plus a
 # restart. Run this when the local stack is up.
 #
-# The connection string is read from the Hyperdrive binding in
-# wrangler.jsonc rather than duplicated here, so the local database is
-# configured in exactly one place.
+# The connection string is read from the documented
+# CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE environment
+# variable, so the local database credential is never committed.
 #
-# Migration `007` is applied before the write phase. The migration is
-# written to be re-runnable - `create extension if not exists`,
-# `create table if not exists`, `create index if not exists`, and comments -
-# so applying it on every run is safe and removes the manual migration step
-# this repository has to otherwise remember. It only ever adds a table and
-# indexes, so a re-run changes nothing that already exists.
+# Migration `007` is applied before the write phase, and migration `010` is
+# applied for the published-catalog projection view the discovery query now
+# joins. Both migrations are written to be re-runnable, so applying them on
+# every run is safe and removes the manual migration step this repository has
+# to otherwise remember. They only ever add objects and policies, so a re-run
+# changes nothing that already exists.
 #
 # It is applied twice on purpose. The first application is what a fresh
 # database needs; the second proves the migration really is idempotent
@@ -27,10 +27,10 @@ $root = Split-Path -Parent $PSScriptRoot
 $tsx = Join-Path $root "node_modules\.bin\tsx.cmd"
 $testTsconfig = Join-Path $root "tests\m6-buyer-journey\tsconfig.json"
 $suite = Join-Path $root "tests\m6-buyer-journey\buyer-journey-postgres-runtime.test.ts"
-$wranglerConfig = Join-Path $root "apps\api\wrangler.jsonc"
 $migrations = @(
   (Join-Path $root "infra\migrations\005_catalog_versions.sql"),
-  (Join-Path $root "infra\migrations\007_inquiries_and_published_search.sql")
+  (Join-Path $root "infra\migrations\007_inquiries_and_published_search.sql"),
+  (Join-Path $root "infra\migrations\010_row_level_security.sql")
 )
 
 $container = "artisan-marketplace-postgres"
@@ -43,19 +43,8 @@ foreach ($migration in $migrations) {
   if (-not (Test-Path $migration)) { throw "Migration not found: $migration" }
 }
 
-# Comments are stripped by dropping whole-line `//` comments only. A
-# naive `//` strip would corrupt the `postgresql://` scheme inside the
-# connection string.
-$config = (Get-Content -LiteralPath $wranglerConfig) |
-  Where-Object { $_.Trim() -notlike "//*" } |
-  Out-String |
-  ConvertFrom-Json
-
-$localConnectionString = $config.hyperdrive[0].localConnectionString
-
-if (-not $localConnectionString) {
-  throw "No Hyperdrive localConnectionString found in $wranglerConfig"
-}
+. (Join-Path $root "scripts\lib\hyperdrive-local-connection.ps1")
+$localConnectionString = Get-HyperdriveLocalConnectionString
 
 # The database and role are read from the same connection string rather than
 # repeated here, so the migrations are applied to the database the tests will
@@ -96,7 +85,7 @@ foreach ($migration in $migrations) {
 
     try {
       Get-Content -LiteralPath $migration -Raw |
-        docker exec -i $container psql -v ON_ERROR_STOP=1 -U $user -d $database 2>&1 |
+        docker exec -i $container psql -v ON_ERROR_STOP=1 -U artisan_marketplace -d $database 2>&1 |
         Out-Null
     }
     finally {

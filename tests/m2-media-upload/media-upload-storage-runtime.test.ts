@@ -21,14 +21,16 @@ import {
 const STALE_CUTOFF_MS = 60_000;
 
 async function main(): Promise<void> {
+  const OWNER = "artisan-owner-1";
   const draft = await setLocalProductRemoteId(
-    (await createLocalProductDraft()).localId,
+    OWNER,
+    (await createLocalProductDraft(OWNER)).localId,
     "remote-product-storage",
   );
 
   assert.ok(draft.remoteProductId);
 
-  const media = await createLocalMediaIntent({
+  const media = await createLocalMediaIntent(OWNER, {
     localId: "storage-media-1",
     productId: draft.localId,
     kind: "IMAGE",
@@ -45,7 +47,7 @@ async function main(): Promise<void> {
 
   const operationId = `${media.localId}:CREATE_MEDIA_ATTACHMENT`;
 
-  const claimed = await claimSyncOperation(operationId);
+  const claimed = await claimSyncOperation(OWNER, operationId);
 
   assert.ok(claimed);
   assert.equal(claimed.state, "IN_FLIGHT");
@@ -54,13 +56,14 @@ async function main(): Promise<void> {
   // Recording progress must not acknowledge the operation: the bytes are
   // not verified yet, so an interrupted upload still has to be retried.
   await recordMediaRemoteProgress(
+    OWNER,
     media.localId,
     "remote-media-1",
     "UPLOAD_AUTHORIZED",
   );
 
   const afterAuthorization =
-    await getLocalMediaIntent(media.localId);
+    await getLocalMediaIntent(OWNER, media.localId);
 
   assert.ok(afterAuthorization);
   assert.equal(afterAuthorization.remoteMediaId, "remote-media-1");
@@ -71,6 +74,7 @@ async function main(): Promise<void> {
   assert.equal(afterAuthorization.state, "PENDING_SYNC");
 
   const stillInFlight = await getSyncOperation(
+    OWNER,
     operationId,
   );
 
@@ -88,12 +92,16 @@ async function main(): Promise<void> {
     "UPLOADED",
   ] as const) {
     await recordMediaRemoteProgress(
+      OWNER,
       media.localId,
       "remote-media-1",
       remoteState,
     );
 
-    const current = await getLocalMediaIntent(media.localId);
+    const current = await getLocalMediaIntent(
+      OWNER,
+      media.localId,
+    );
 
     assert.ok(current);
     assert.equal(current.remoteState, remoteState);
@@ -102,12 +110,14 @@ async function main(): Promise<void> {
   // An unrecognized state must never be written, so a local record can
   // not claim something the rest of the app does not understand.
   await recordMediaRemoteProgress(
+    OWNER,
     media.localId,
     "remote-media-1",
     "SOMETHING_ELSE",
   );
 
   const afterUnknown = await getLocalMediaIntent(
+    OWNER,
     media.localId,
   );
 
@@ -120,30 +130,35 @@ async function main(): Promise<void> {
 
   // Only verified media is acknowledged.
   await recordMediaRemoteProgress(
+    OWNER,
     media.localId,
     "remote-media-1",
     "VERIFIED",
   );
   await markMediaSynced(
+    OWNER,
     media.localId,
     operationId,
     "remote-media-1",
   );
 
-  const verified = await getLocalMediaIntent(media.localId);
+  const verified = await getLocalMediaIntent(
+    OWNER,
+    media.localId,
+  );
 
   assert.ok(verified);
   assert.equal(verified.state, "SYNCED");
   assert.equal(verified.remoteState, "VERIFIED");
 
-  const acked = await getSyncOperation(operationId);
+  const acked = await getSyncOperation(OWNER, operationId);
 
   assert.ok(acked);
   assert.equal(acked.state, "ACKED");
 
   // Acknowledged work is not offered again.
   const pendingAfterAck =
-    await listPendingSyncOperations(50);
+    await listPendingSyncOperations(OWNER, 50);
 
   assert.equal(
     pendingAfterAck.filter(
@@ -159,7 +174,7 @@ async function main(): Promise<void> {
   // must return to the queue, or the artisan's media is stuck forever.
   // -------------------------------------------------------------------
 
-  const stranded = await createLocalMediaIntent({
+  const stranded = await createLocalMediaIntent(OWNER, {
     localId: "storage-media-2",
     productId: draft.localId,
     kind: "IMAGE",
@@ -173,6 +188,7 @@ async function main(): Promise<void> {
     `${stranded.localId}:CREATE_MEDIA_ATTACHMENT`;
 
   const strandedClaim = await claimSyncOperation(
+    OWNER,
     strandedOperationId,
   );
 
@@ -180,6 +196,7 @@ async function main(): Promise<void> {
   assert.equal(strandedClaim.state, "IN_FLIGHT");
 
   await recordMediaRemoteProgress(
+    OWNER,
     stranded.localId,
     "remote-media-2",
     "UPLOADING",
@@ -190,6 +207,7 @@ async function main(): Promise<void> {
   // live claim must survive.
   const immediateRecovery =
     await recoverStaleSyncOperations(
+      OWNER,
       new Date(Date.now() - STALE_CUTOFF_MS).toISOString(),
     );
 
@@ -200,6 +218,7 @@ async function main(): Promise<void> {
   );
 
   const stillClaimed = await getSyncOperation(
+    OWNER,
     strandedOperationId,
   );
 
@@ -212,6 +231,7 @@ async function main(): Promise<void> {
 
   // A cutoff beyond this claim makes it stale, and it must be recovered.
   const recovered = await recoverStaleSyncOperations(
+    OWNER,
     new Date(Date.now() + STALE_CUTOFF_MS).toISOString(),
   );
 
@@ -221,6 +241,7 @@ async function main(): Promise<void> {
   );
 
   const requeued = await getSyncOperation(
+    OWNER,
     strandedOperationId,
   );
 
@@ -234,6 +255,7 @@ async function main(): Promise<void> {
   // The remote state survives, so the retry resumes rather than starting
   // over blind.
   const resumable = await getLocalMediaIntent(
+    OWNER,
     stranded.localId,
   );
 
@@ -249,7 +271,7 @@ async function main(): Promise<void> {
     "the server media id survives the restart",
   );
 
-  const queued = await listPendingSyncOperations(50);
+  const queued = await listPendingSyncOperations(OWNER, 50);
 
   assert.ok(
     queued.some(
@@ -262,6 +284,7 @@ async function main(): Promise<void> {
   // The recovered operation can be claimed again, and the attempt
   // counter keeps growing rather than resetting.
   const reclaimed = await claimSyncOperation(
+    OWNER,
     strandedOperationId,
   );
 
@@ -274,7 +297,10 @@ async function main(): Promise<void> {
   );
 
   // Listing intents still reports the persisted remote state.
-  const listed = await listLocalMediaIntents(draft.localId);
+  const listed = await listLocalMediaIntents(
+    OWNER,
+    draft.localId,
+  );
 
   const listedStranded = listed.find(
     (intent) => intent.localId === stranded.localId,

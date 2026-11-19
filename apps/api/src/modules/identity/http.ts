@@ -6,6 +6,10 @@ import { identitySessionStore } from './composition.js';
 import { allowsInMemorySessionStore, hasSessionStoreConfigured } from './composition.js';
 import type { SessionBindingEnv } from '../../shared/auth/session.js';
 import { requireActorSync } from '../../shared/auth/session.js';
+import {
+  enforceAuthIpRateLimit,
+  enforceAuthRateLimit,
+} from './auth-rate-limit.js';
 
 export const authRoutes = new Hono<ApiEnv>();
 
@@ -108,9 +112,9 @@ authRoutes.post('/v1/auth/register', async (c) => {
     throw new AppError('VALIDATION_FAILED', 'Password must be a string.', { field: 'password' });
   }
 
-  // Throttle: register uses (CF-Connecting-IP, username_normalized) per Q5.6/P14
-  // The throttle middleware is applied at the route level in production
-  // For now, we rely on the existing rate limit middleware
+  // Throttle after structural validation and before account creation.
+  // The subject is (trusted Cloudflare IP, normalized username) per Q5.6/P14.
+  await enforceAuthRateLimit(c, 'register', username);
 
   try {
     const result = await identity.register({
@@ -144,7 +148,7 @@ authRoutes.post('/v1/auth/register', async (c) => {
       '[auth] register 503',
       JSON.stringify({
         appEnv: env.APP_ENV ?? 'unset',
-        inMemoryStore: allowsInMemorySessionStore(env.APP_ENV ?? ''),
+        inMemoryStore: allowsInMemorySessionStore(env),
         sessionStoreConfigured: hasSessionStoreConfigured(env),
         name: error instanceof Error ? error.name : typeof error,
       }),
@@ -223,8 +227,9 @@ authRoutes.post('/v1/auth/login', async (c) => {
     throw new AppError('VALIDATION_FAILED', 'Password must be a string.', { field: 'password' });
   }
 
-  // Throttle: login uses (CF-Connecting-IP, username_normalized) per Q3.5/Q5.6
-  // Applied via middleware in production
+  // Throttle after structural validation and before credential verification.
+  // The subject is (trusted Cloudflare IP, normalized username) per Q3.5/Q5.6.
+  await enforceAuthRateLimit(c, 'login', username);
 
   try {
     const result = await identity.login({
@@ -319,6 +324,10 @@ authRoutes.post('/v1/auth/refresh', async (c) => {
   if (refreshToken === undefined || refreshToken === null || typeof refreshToken !== 'string') {
     throw new AppError('UNAUTHENTICATED', 'Invalid refresh token.');
   }
+
+  // Throttle by trusted IP after structural validation and before token
+  // verification or session mutation.
+  await enforceAuthIpRateLimit(c, 'refresh');
 
   // Authorization header is ignored on refresh (P5, P21)
 
@@ -435,6 +444,10 @@ authRoutes.post('/v1/auth/logout', async (c) => {
   if (refreshToken === undefined || refreshToken === null || typeof refreshToken !== 'string') {
     throw new AppError('UNAUTHENTICATED', 'Invalid refresh token.');
   }
+
+  // Throttle by trusted IP after structural validation and before token
+  // verification or session mutation.
+  await enforceAuthIpRateLimit(c, 'logout');
 
   // Authorization header is ignored on logout (P5, P21)
 

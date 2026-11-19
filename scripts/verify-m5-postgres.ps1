@@ -6,9 +6,9 @@ $ErrorActionPreference = "Stop"
 # service-free fast path, and this proof needs a running database plus a
 # restart. Run this when the local stack is up.
 #
-# The connection string is read from the Hyperdrive binding in
-# wrangler.jsonc rather than duplicated here, so the local database is
-# configured in exactly one place.
+# The connection string is read from the documented
+# CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE environment
+# variable, so the local database credential is never committed.
 #
 # Migrations 005 and 006 are applied before the write phase. Both are
 # written to be re-runnable - `create table if not exists`,
@@ -21,10 +21,10 @@ $root = Split-Path -Parent $PSScriptRoot
 $tsx = Join-Path $root "node_modules\.bin\tsx.cmd"
 $testTsconfig = Join-Path $root "tests\m5-review-publish\tsconfig.json"
 $suite = Join-Path $root "tests\m5-review-publish\review-publish-postgres-runtime.test.ts"
-$wranglerConfig = Join-Path $root "apps\api\wrangler.jsonc"
 $migrations = @(
   (Join-Path $root "infra\migrations\005_catalog_versions.sql"),
-  (Join-Path $root "infra\migrations\006_ai_jobs_and_proposals.sql")
+  (Join-Path $root "infra\migrations\006_ai_jobs_and_proposals.sql"),
+  (Join-Path $root "infra\migrations\011_ai_job_outbox.sql")
 )
 
 $container = "artisan-marketplace-postgres"
@@ -37,19 +37,8 @@ foreach ($migration in $migrations) {
   if (-not (Test-Path $migration)) { throw "Migration not found: $migration" }
 }
 
-# Comments are stripped by dropping whole-line `//` comments only. A
-# naive `//` strip would corrupt the `postgresql://` scheme inside the
-# connection string.
-$config = (Get-Content -LiteralPath $wranglerConfig) |
-  Where-Object { $_.Trim() -notlike "//*" } |
-  Out-String |
-  ConvertFrom-Json
-
-$localConnectionString = $config.hyperdrive[0].localConnectionString
-
-if (-not $localConnectionString) {
-  throw "No Hyperdrive localConnectionString found in $wranglerConfig"
-}
+. (Join-Path $root "scripts\lib\hyperdrive-local-connection.ps1")
+$localConnectionString = Get-HyperdriveLocalConnectionString
 
 # The database and role are read from the same connection string rather than
 # repeated here, so the migrations are applied to the database the tests will
@@ -88,7 +77,7 @@ foreach ($migration in $migrations) {
 
   try {
     Get-Content -LiteralPath $migration -Raw |
-      docker exec -i $container psql -v ON_ERROR_STOP=1 -U $user -d $database 2>&1 |
+      docker exec -i $container psql -v ON_ERROR_STOP=1 -U artisan_marketplace -d $database 2>&1 |
       Out-Null
   }
   finally {

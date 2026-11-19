@@ -4,8 +4,14 @@ import { PRODUCT_STATES } from '@artisan-marketplace/contracts';
 const OWNER = '00000000-0000-4000-8000-000000000001';
 const OTHER = '00000000-0000-4000-8000-000000000002';
 
+// This file's HTTP fixtures cannot pass a build mode through `app.request`.
+// The suite-scoped development build matches APP_ENV below; production call
+// sites still omit the seam.
+process.env.NODE_ENV = 'development';
+
 const ENV = {
   APP_ENV: 'development',
+  LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
   DEV_OWNER_ID: OWNER,
 };
 
@@ -505,7 +511,11 @@ async function testOwnershipIsEnforcedAtTheBoundary(): Promise<void> {
       method: 'POST',
       headers: { 'idempotency-key': 'm3-owner-key' },
     },
-    { APP_ENV: 'development', DEV_OWNER_ID: OTHER },
+    {
+      APP_ENV: 'development',
+      LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+      DEV_OWNER_ID: OTHER,
+    },
   );
 
   expect(
@@ -520,7 +530,11 @@ async function testOwnershipIsEnforcedAtTheBoundary(): Promise<void> {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ title: 'Hijacked' }),
     },
-    { APP_ENV: 'development', DEV_OWNER_ID: OTHER },
+    {
+      APP_ENV: 'development',
+      LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+      DEV_OWNER_ID: OTHER,
+    },
   );
 
   expect(
@@ -531,7 +545,11 @@ async function testOwnershipIsEnforcedAtTheBoundary(): Promise<void> {
   const versions = await app.request(
     `/catalog/products/${created.id}/versions`,
     { method: 'GET' },
-    { APP_ENV: 'development', DEV_OWNER_ID: OTHER },
+    {
+      APP_ENV: 'development',
+      LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+      DEV_OWNER_ID: OTHER,
+    },
   );
 
   expect(
@@ -539,8 +557,45 @@ async function testOwnershipIsEnforcedAtTheBoundary(): Promise<void> {
     `Expected 403 reading another artisan's history, got ${versions.status}.`,
   );
 
+  /**
+   * A draft is private until publication. The product read is authenticated
+   * but must also be ownership-scoped: otherwise any signed-in actor could
+   * read another artisan's unlisted work by supplying its id.
+   */
+  const otherRead = await app.request(
+    `/catalog/products/${created.id}`,
+    { method: 'GET' },
+    {
+      APP_ENV: 'development',
+      LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+      DEV_OWNER_ID: OTHER,
+    },
+  );
+
+  expect(
+    otherRead.status === 403,
+    `Expected 403 reading another artisan's draft, got ${otherRead.status}.`,
+  );
+  expect(
+    created.title !== null &&
+      !JSON.stringify(await readJson<unknown>(otherRead)).includes(
+        created.title,
+      ),
+    'The refusal does not disclose the draft.',
+  );
+
+  const ownRead = await json(
+    `/catalog/products/${created.id}`,
+    'GET',
+  );
+
+  expect(
+    ownRead.status === 200,
+    `Expected 200 reading the owner's product, got ${ownRead.status}.`,
+  );
+
   const untouched = await readJson<{ product: ProductPayload }>(
-    await json(`/catalog/products/${created.id}`, 'GET'),
+    ownRead,
   );
 
   expect(
@@ -601,6 +656,320 @@ async function testPublishRoutesRejectAnonymousCallers(): Promise<void> {
   );
 }
 
+interface RecordedDurableCheck {
+  objectName: string;
+  url: string;
+  method: string | undefined;
+  body: {
+    limit: number;
+    windowMs: number;
+    now: number;
+  };
+}
+
+/**
+ * Creates a fake Durable Object namespace that enforces rate limits per objectName
+ * (hashed subject). Each objectName gets its own counter; after the policy limit
+ * is exceeded, it returns a denied response. This mimics the sliding-window
+ * behavior for test purposes.
+ *
+ * @param scopeOverrides Optional map of operation scope -> custom limit.
+ *   Use to relax limits for test setup operations (e.g., approval) while
+ *   enforcing the real limit for the operation under test (e.g., publish).
+ */
+function createEnforcingDurableNamespace(): {
+  namespace: DurableObjectNamespace;
+  checks: RecordedDurableCheck[];
+  subjectByObjectName: Map<string, string>;
+} {
+  const checks: RecordedDurableCheck[] = [];
+  const subjectByObjectName = new Map<string, string>();
+  const callCounts = new Map<string, number>();
+
+  const namespace = {
+    idFromName(name: string) {
+      return name as unknown as DurableObjectId;
+    },
+    get(id: DurableObjectId) {
+      const objectName = String(id);
+      return {
+        async fetch(input: RequestInfo | URL, init?: RequestInit) {
+          const body = JSON.parse(String(init?.body)) as RecordedDurableCheck['body'];
+          const count = (callCounts.get(objectName) || 0) + 1;
+          callCounts.set(objectName, count);
+
+          const check: RecordedDurableCheck = {
+            objectName,
+            url: String(input),
+            method: init?.method,
+            body,
+          };
+          checks.push(check);
+
+          // Enforce limit per objectName based on the policy in the request body
+          if (count > body.limit) {
+            return new Response(
+              JSON.stringify({
+                allowed: false,
+                remaining: 0,
+                resetAt: Date.now() + 60_000,
+              }),
+              {
+                status: 200,
+                headers: { 'content-type': 'application/json' },
+              },
+            );
+          }
+
+          return new Response(
+            JSON.stringify({
+              allowed: true,
+              remaining: body.limit - count,
+              resetAt: Date.now() + 60_000,
+            }),
+            {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            },
+          );
+        },
+      } as unknown as DurableObjectStub;
+    },
+  } as unknown as DurableObjectNamespace;
+
+  return { namespace, checks, subjectByObjectName };
+}
+
+/**
+ * Regression test: the catalog.product.publish rate limit is shared across
+ * different product IDs for the same actor. Uses the production resolver
+ * with a fake Durable Object that enforces the limit.
+ *
+ * Eleven different products are created and published by the same actor.
+ * The budget is 10 requests per 60 seconds. Requests 1-10 must succeed
+ * (not rate-limited). Request 11 must be rejected with HTTP 429.
+ */
+async function testPublishRateLimitSharedAcrossProductIds(): Promise<void> {
+  const { namespace } = createEnforcingDurableNamespace();
+
+  const sessionToken = 'test-session-token';
+  const sessionActorId = 'actor-publish-rate-limit';
+
+  // Development environment for test setup (in-memory repo + in-memory auth).
+  // Uses a dedicated actor so its rate-limit buckets don't interfere with
+  // other tests in this suite.
+  const setupEnv = {
+    APP_ENV: 'development',
+    LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+    DEV_OWNER_ID: sessionActorId,
+  };
+
+  // Production-like environment for the rate-limit test:
+  // - APP_ENV: development (so catalog service uses in-memory repo)
+  // - NO LOCAL_IN_MEMORY_AUTH_ENABLED (so rate limiter uses Durable Object)
+  // - Static session via SESSION_TOKEN + SESSION_ACTOR_ID
+  // - Fake Durable Object namespace that enforces limits
+  const rateLimitEnv = {
+    APP_ENV: 'development',
+    SESSION_TOKEN: sessionToken,
+    SESSION_ACTOR_ID: sessionActorId,
+    AUTH_RATE_LIMITER: namespace,
+  };
+
+  // Helper to make requests with the rate limit env
+  async function jsonWithRateLimit(
+    path: string,
+    method: string,
+    body?: unknown,
+    headers: Record<string, string> = {},
+  ): Promise<Response> {
+    return app.request(
+      path,
+      {
+        method,
+        headers: {
+          ...(body === undefined
+            ? {}
+            : { 'content-type': 'application/json' }),
+          authorization: `Bearer ${sessionToken}`,
+          ...headers,
+        },
+        ...(body === undefined
+          ? {}
+          : { body: JSON.stringify(body) }),
+      },
+      rateLimitEnv,
+    );
+  }
+
+  // Create 2 products for the same actor using the setup environment
+  // (only 2 approvals needed, well under the 10/60s limit)
+  const productA = await createProductWithEnv('m3-rl-product-a', setupEnv);
+  const productB = await createProductWithEnv('m3-rl-product-b', setupEnv);
+
+  // Advance both products to APPROVED (ready for publication) using setup env
+  await advanceWithEnv(productA.id, setupEnv,
+    'PENDING_SYNC', 'SYNCED', 'REVIEW_REQUIRED', 'APPROVED');
+  await advanceWithEnv(productB.id, setupEnv,
+    'PENDING_SYNC', 'SYNCED', 'REVIEW_REQUIRED', 'APPROVED');
+
+  // Now publish the two products alternately to exhaust the shared budget (10)
+  // publish limit is 10 per 60s per actor
+  let allowedCount = 0;
+  let deniedCount = 0;
+
+  for (let i = 0; i < 11; i++) {
+    const productId = i % 2 === 0 ? productA.id : productB.id;
+    const idempotencyKey = `m3-rl-publish-${i}`;
+
+    const response = await jsonWithRateLimit(
+      `/catalog/products/${productId}/publish`,
+      'POST',
+      undefined,
+      { 'idempotency-key': idempotencyKey },
+    );
+
+    if (response.status === 429) {
+      deniedCount++;
+      // Verify rate limit error envelope
+      const body = await readJson<{ error: { code: string; details?: { resetAt?: number } } }>(response);
+      expect(
+        body.error.code === 'RATE_LIMITED',
+        `Expected RATE_LIMITED error code, got ${body.error.code}`,
+      );
+      expect(
+        response.headers.get('x-ratelimit-remaining') === '0',
+        'Rate limited response must have x-ratelimit-remaining: 0',
+      );
+      expect(
+        response.headers.get('retry-after') !== null,
+        'Rate limited response must have retry-after header',
+      );
+    } else if (response.status === 201 || response.status === 200 || response.status === 409) {
+      allowedCount++;
+      // 409 (CONFLICT) means the rate limiter allowed the request but the service
+      // rejected it because the product was already published. This is expected
+      // for duplicate publishes with different idempotency keys. The rate limit
+      // budget is still consumed.
+      // Verify rate limit headers on allowed responses
+      expect(
+        response.headers.get('x-ratelimit-remaining') !== null,
+        'Allowed response must have x-ratelimit-remaining header',
+      );
+      expect(
+        response.headers.get('x-ratelimit-reset') !== null,
+        'Allowed response must have x-ratelimit-reset header',
+      );
+    } else {
+      throw new Error(`Unexpected status ${response.status} on request ${i + 1}`);
+    }
+  }
+
+  expect(
+    allowedCount === 10,
+    `Expected 10 allowed requests, got ${allowedCount}`,
+  );
+  expect(
+    deniedCount === 1,
+    `Expected 1 denied request, got ${deniedCount}`,
+  );
+}
+
+/**
+ * Creates a product using a custom environment (for rate limit testing).
+ */
+async function createProductWithEnv(
+  idempotencyKey: string,
+  env: Record<string, unknown>,
+  body: Record<string, unknown> = {},
+): Promise<ProductPayload> {
+  const sessionToken = typeof env.SESSION_TOKEN === 'string' ? env.SESSION_TOKEN : undefined;
+  const response = await app.request(
+    '/catalog/products',
+    {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'idempotency-key': idempotencyKey,
+        ...(sessionToken ? { authorization: `Bearer ${sessionToken}` } : {}),
+      },
+      body: JSON.stringify({
+        title: 'Bamboo Basket',
+        description: 'Handwoven storage basket.',
+        category: 'basketry',
+        materials: ['bamboo'],
+        ...body,
+      }),
+    },
+    env,
+  );
+
+  expect(
+    response.status === 201,
+    `Expected 201 creating a product, got ${response.status}.`,
+  );
+
+  const payload = await readJson<{ product: ProductPayload }>(response);
+  return payload.product;
+}
+
+/**
+ * Advances a product through states using a custom environment.
+ */
+async function advanceWithEnv(
+  productId: string,
+  env: Record<string, unknown>,
+  ...states: string[]
+): Promise<ProductPayload> {
+  let product: ProductPayload | null = null;
+  const sessionToken = typeof env.SESSION_TOKEN === 'string' ? env.SESSION_TOKEN : undefined;
+
+  for (const state of states) {
+    if (state === 'APPROVED') {
+      const response = await app.request(
+        `/catalog/products/${productId}/review/approve`,
+        {
+          method: 'POST',
+          headers: {
+            ...(sessionToken ? { authorization: `Bearer ${sessionToken}` } : {}),
+          },
+        },
+        env,
+      );
+
+      expect(
+        response.status === 200,
+        `Expected 200 approving, got ${response.status}.`,
+      );
+
+      product = (await readJson<{ product: ProductPayload }>(response)).product;
+      continue;
+    }
+
+    const response = await app.request(
+      `/catalog/products/${productId}/transition`,
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          ...(sessionToken ? { authorization: `Bearer ${sessionToken}` } : {}),
+        },
+        body: JSON.stringify({ state }),
+      },
+      env,
+    );
+
+    expect(
+      response.status === 200,
+      `Expected 200 transitioning to ${state}, got ${response.status}.`,
+    );
+
+    product = (await readJson<{ product: ProductPayload }>(response)).product;
+  }
+
+  return product!;
+}
+
 async function main(): Promise<void> {
   await testPublishThroughTheApi();
   await testPublishRetryIsIdempotent();
@@ -610,6 +979,7 @@ async function main(): Promise<void> {
   await testOwnershipIsEnforcedAtTheBoundary();
   await testPublishRequiresIdempotencyKey();
   await testPublishRoutesRejectAnonymousCallers();
+  await testPublishRateLimitSharedAcrossProductIds();
 
   console.log('CATALOG LIFECYCLE HTTP TESTS PASSED');
 }

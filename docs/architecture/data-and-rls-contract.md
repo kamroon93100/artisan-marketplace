@@ -49,22 +49,57 @@ An inquiry must not depend on a local-only draft or AI proposal.
 - Service-role operations must be isolated from normal user operations.
 
 ## Current Enforcement State
-The RLS principles above are the target. They are not yet fully implemented.
 
-As of M6 (discovery and inquiry), enforcement is application-level only:
+ADR-007 and the principles above remain binding. Migration
+`010_row_level_security.sql` is the first enforcement slice:
 
-- `inquiries` has no RLS policy. Read isolation between buyers rests entirely
-  on `buyer_id` being part of the `WHERE` clause of every query that reads an
-  inquiry, and on the fact that the API is the only client. If any non-API
-  client ever reaches PostgreSQL with the same credentials, this isolation
-  disappears.
-- `catalog_products`, `catalog_versions`, and the other M1-M5 tables are in
-  the same position; nothing in this repository has added a policy yet.
-- There is no role model, so no predicate could express one.
+- `catalog_products`, `catalog_versions`, `media_attachments`, `ai_jobs`,
+  `ai_proposals`, and `inquiries` have row-level security enabled.
+- The API publishes the session-resolved actor to PostgreSQL as
+  `app.actor_id` inside every transaction, using transaction-local scope
+  (`set_config(..., true)`) after `BEGIN`. `COMMIT` or `ROLLBACK` discards the
+  setting, so a transaction-mode pooler cannot carry one request's actor into
+  the next. `app.current_actor_id()` returns null when the setting is absent,
+  empty, or not a UUID, so a missing actor is denied rather than defaulted.
+- `catalog_products` is owner-only for `SELECT`. Buyers read published data
+  through `app.published_catalog_products`, a narrow security-definer view
+  exposing only `id`, `published_version`, and `state`. Working drafts,
+  including unpublished edits to a published product, never become row-visible
+  to another account.
+- `media_attachments` is owner-only in this slice. Buyer media reads are
+  deferred until a per-attachment published-visibility model exists; a
+  published product may still carry a private voice note.
+- `inquiries` is buyer-only. The artisan inbox does not exist yet, so no
+  product-owner policy has been invented for it.
+- `ai_jobs` and `ai_proposals` are owned through the product owner. The AI
+  pipeline runs under the actor's request; there is no separate AI service
+  role yet.
 
-This is a recorded gap, not an approved end state. ADR-007 and the "RLS
-Principles" section above remain binding, and the policy work must land before
-a second data path exists.
+### Role model and activation blocker
+
+`infra/database/app-role.sql` creates a `NOLOGIN`, `NOSUPERUSER`,
+`NOBYPASSRLS` privilege group, `artisan_marketplace_app`. A deployment creates
+a separate login role, grants that group to it, and points the application
+connection (including the Hyperdrive binding) at that login. The login must not
+own the tables.
+
+That activation is not complete in the local development database: its only
+application role, `artisan_marketplace`, owns the tables and is
+`SUPERUSER`/`BYPASSRLS`. Policies are present but bypassed for that
+connection. The owner bypass is intentional while migrations, backfills, and
+trusted operations use the same role; `FORCE ROW LEVEL SECURITY` is not used.
+See `infra/database/README.md` for the activation steps and
+`tests/rls-policy/` for the isolated proof under a real non-owner login.
+
+### Still outside RLS
+
+- `identity_accounts`, `identity_sessions`, and `identity_refresh_grants`.
+  Session verification happens before an actor identity exists; these tables
+  need a separate auth role or a security-definer boundary.
+- Buyer media reads and the artisan inquiry inbox, as described above.
+- Reviewer and service-role operations. There is no reviewer role and no
+  separate AI service role; a background worker must not reuse the API login
+  without an actor.
 
 ## Artisan Access
 An artisan may:
@@ -84,7 +119,8 @@ An artisan must not:
 ## Buyer Access
 A buyer may:
 - read published catalog information
-- read media attached to published products
+- read media attached to published products (target; not yet implemented — buyer
+  media reads are deferred until a per-attachment visibility model exists)
 - create inquiries against published products
 - read inquiries they are authorized to see
 
@@ -105,6 +141,11 @@ AI jobs may read only the minimum authorized inputs.
 
 AI processing may create proposal records but cannot bypass the canonical validation/review boundary.
 
+In the current slice, AI jobs and proposals are owner-scoped through the
+product owner and run under the authenticated actor's database connection.
+There is no separate AI service role; a background worker must be given an
+explicit actor and must not reuse the API login anonymously.
+
 ## Publishing Boundary
 A product becomes buyer-visible only through an explicit publish transition.
 
@@ -117,15 +158,14 @@ Audit records must not contain passwords, tokens, raw authorization headers, or 
 
 ## Open Decisions
 - Exact table columns
-- Role model
-- Auth/session implementation
+- Deployment login role provisioning (the NOLOGIN privilege group is defined;
+  the login credential remains deployment configuration)
 - Service-role boundary
-- Exact RLS predicates
 - Reviewer assignment model
 - Soft-delete/tombstone fields
 - Catalog-version schema
-- Inquiry visibility rules
-- Media authorization model
+- Buyer media visibility model
+- Artisan inquiry inbox and status transitions
 
 ## Acceptance
 Every first-slice user path must have an explicit database authorization rule.

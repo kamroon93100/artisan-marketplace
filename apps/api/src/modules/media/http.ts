@@ -4,8 +4,9 @@ import { MEDIA_KINDS } from '@artisan-marketplace/contracts';
 import type { ApiEnv } from '../../shared/context/api-env.js';
 import { requireActor } from '../../shared/auth/session.js';
 import {
-  uploadAuthLimiter,
-  rateLimitMiddleware,
+  enforceRateLimit,
+  resolveOperationRateLimiters,
+  buildOperationKey,
 } from '../../shared/ratelimit/index.js';
 import { getMediaService } from './composition.js';
 
@@ -43,6 +44,13 @@ function actorId(c: Context<ApiEnv>): string {
 mediaRoutes.post(
   '/products/:id/media',
   async (c) => {
+    const limiters = resolveOperationRateLimiters(c.env);
+    await enforceRateLimit(
+      c,
+      limiters['media.upload.authorization'],
+      buildOperationKey('media.upload.authorization', actorId(c)),
+      'upload authorization',
+    );
     const body =
       await c.req.json<{
         kind?: string;
@@ -89,7 +97,7 @@ mediaRoutes.post(
     }
 
     const result =
-      await getMediaService(c.env).requestAttachment({
+      await getMediaService(c.env, actorId(c)).requestAttachment({
         productId: c.req.param('id'),
         kind:
           body.kind as (typeof MEDIA_KINDS)[number],
@@ -123,11 +131,18 @@ function readRequestedTtl(
 
 mediaRoutes.post(
   '/media/:id/upload-authorization',
-  rateLimitMiddleware(uploadAuthLimiter, 'upload authorization'),
   async (c) => {
+    const limiters = resolveOperationRateLimiters(c.env);
+    await enforceRateLimit(
+      c,
+      limiters['media.upload.authorization'],
+      buildOperationKey('media.upload.authorization', actorId(c)),
+      'upload authorization',
+    );
     const result =
       await getMediaService(
         c.env,
+        actorId(c),
       ).authorizeUpload(
         c.req.param('id')!,
         actorId(c),
@@ -146,11 +161,18 @@ mediaRoutes.post(
 
 mediaRoutes.post(
   '/media/:id/upload-start',
-  rateLimitMiddleware(uploadAuthLimiter, 'upload start'),
   async (c) => {
+    const limiters = resolveOperationRateLimiters(c.env);
+    await enforceRateLimit(
+      c,
+      limiters['media.upload.start'],
+      buildOperationKey('media.upload.start', actorId(c)),
+      'upload start',
+    );
     const result =
       await getMediaService(
         c.env,
+        actorId(c),
       ).startUpload(
         c.req.param('id')!,
         actorId(c),
@@ -173,6 +195,7 @@ mediaRoutes.post(
     const result =
       await getMediaService(
         c.env,
+        actorId(c),
       ).completeUpload(
         c.req.param('id'),
         actorId(c),

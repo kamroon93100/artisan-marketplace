@@ -21,20 +21,50 @@ export default function HomeScreen() {
   const [signingOut, setSigningOut] = useState(false);
   const questions = inquiryHistoryAction();
 
-  async function loadLatest(): Promise<void> {
-    const drafts = await listLocalProductDrafts();
+  /**
+   * Local drafts are owned by the authenticated server actor. Without a
+   * session there is no owner to read or write them for, and guessing one
+   * would either expose another account's work or create an unowned row.
+   */
+  const ownerId = state.session?.actorId ?? null;
+
+  async function loadLatest(owner: string): Promise<void> {
+    const drafts = await listLocalProductDrafts(owner);
     setDraft(drafts[0] ?? null);
   }
 
   useEffect(() => {
-    void loadLatest();
-  }, []);
+    let cancelled = false;
+
+    // Clear immediately so a draft from the previous account is never
+    // shown while the new account's records are being read.
+    setDraft(null);
+    setActive(false);
+
+    if (!ownerId) {
+      return;
+    }
+
+    void listLocalProductDrafts(ownerId).then((drafts) => {
+      if (!cancelled) {
+        setDraft(drafts[0] ?? null);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ownerId]);
 
   async function startCreate(): Promise<void> {
+    if (!ownerId) {
+      return;
+    }
+
     setCreating(true);
 
     try {
-      const next = await createLocalProductDraft();
+      const next = await createLocalProductDraft(ownerId);
       setDraft(next);
       setActive(true);
     } finally {
@@ -52,13 +82,14 @@ export default function HomeScreen() {
     }
   }
 
-  if (active && draft) {
+  if (active && draft && ownerId) {
     return (
       <CreateProductScreen
         draftId={draft.localId}
+        ownerId={ownerId}
         onBack={() => {
           setActive(false);
-          void loadLatest();
+          void loadLatest(ownerId);
         }}
       />
     );

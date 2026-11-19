@@ -6,6 +6,12 @@ import { requireActor } from '../../shared/auth/session.js';
 import { getDiscoveryService } from './composition.js';
 import { parseDiscoveryQuery } from './domain/discovery-query.js';
 import { DiscoveryQueryError } from './domain/discovery-query.js';
+import {
+  enforceRateLimit,
+  resolveOperationRateLimiters,
+  buildOperationKey,
+  type OperationScope,
+} from '../../shared/ratelimit/index.js';
 
 export const discoveryRoutes = new Hono<ApiEnv>();
 
@@ -43,6 +49,10 @@ discoveryRoutes.use('*', async (c, next) => {
   await next();
 });
 
+function actorId(c: Context<ApiEnv>): string {
+  return c.get('requestContext').actor.actorId;
+}
+
 /**
  * Reads a matched route parameter.
  *
@@ -79,10 +89,17 @@ function routeProductId(c: Context<ApiEnv>): string {
  *
  * Every parameter is untrusted and is validated before any business logic
  * runs, so a malformed page size or search term is reported as invalid input
- * with a message that names the parameter at fault â€” the boundary
+ * with a message that names the parameter at fault — the boundary
  * validation ADR-009 requires, done before the catalog is asked anything.
  */
 discoveryRoutes.get('/products', async (c) => {
+  const limiters = resolveOperationRateLimiters(c.env);
+  await enforceRateLimit(
+    c,
+    limiters['discovery.search'],
+    buildOperationKey('discovery.search', actorId(c)),
+    'discovery search',
+  );
   try {
     const query = parseDiscoveryQuery({
       search: c.req.query('search'),
@@ -91,7 +108,10 @@ discoveryRoutes.get('/products', async (c) => {
     });
 
     return c.json(
-      await getDiscoveryService(c.env).search(query),
+      await getDiscoveryService(
+        c.env,
+        actorId(c),
+      ).search(query),
     );
   } catch (error) {
     if (error instanceof DiscoveryQueryError) {
@@ -122,8 +142,16 @@ discoveryRoutes.get('/products', async (c) => {
 discoveryRoutes.get(
   '/products/:productId',
   async (c) => {
+    const limiters = resolveOperationRateLimiters(c.env);
+    await enforceRateLimit(
+      c,
+      limiters['discovery.read'],
+      buildOperationKey('discovery.read', actorId(c)),
+      'discovery read',
+    );
     const product = await getDiscoveryService(
       c.env,
+      actorId(c),
     ).getPublishedProduct(routeProductId(c));
 
     return c.json({ product });

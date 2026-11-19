@@ -10,9 +10,10 @@ export type HyperdriveBinding = {
  * shapes.
  *
  * A deployed Worker receives a Hyperdrive binding object. `wrangler dev`
- * connects through that same binding, configured with a
- * `localConnectionString` in `wrangler.jsonc`, so both environments
- * deliver one shape and neither is a second source of truth.
+ * connects through that same binding, configured with the documented
+ * CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE environment
+ * variable, so both environments deliver one shape and neither is a
+ * second source of truth.
  */
 export type PostgresConnectionValue =
   | HyperdriveBinding

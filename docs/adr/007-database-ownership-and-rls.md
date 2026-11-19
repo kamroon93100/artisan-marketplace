@@ -52,6 +52,40 @@ Examples include required relationships, uniqueness, valid state references, and
 
 Business rules that require external calls or complex orchestration remain outside database constraints.
 
+## Implementation Note (2026-10-22)
+
+The first RLS slice is implemented by
+`infra/migrations/010_row_level_security.sql`:
+
+- The authenticated actor is published as `app.actor_id` inside every
+  transaction, after `BEGIN`, with transaction-local scope
+  (`set_config(..., true)`). `COMMIT` or `ROLLBACK` discards it, which is the
+  safe invariant under transaction-mode pooling such as Hyperdrive.
+  `app.current_actor_id()` normalizes it to a UUID or null; null denies every
+  tenant row, so a missing actor fails closed.
+- `catalog_products`, `catalog_versions`, `media_attachments`, `ai_jobs`,
+  `ai_proposals`, and `inquiries` have RLS enabled with explicit owner or
+  buyer policies.
+- Buyer discovery reads a narrow security-definer view,
+  `app.published_catalog_products`, rather than the working product row. That
+  is what allows `catalog_products` to remain owner-only without breaking
+  published reads.
+- `infra/database/app-role.sql` defines a `NOLOGIN`, `NOBYPASSRLS` privilege
+  group. A deployment must create a non-owner login role, grant the group to
+  it, and point the application connection at that login. The local
+  development connection is still the table owner and therefore bypasses the
+  policies.
+- `FORCE ROW LEVEL SECURITY` is deliberately not used while the owner and the
+  trusted maintenance path are the same role. The owner bypass is explicit;
+  it is not the enforcement target.
+- Identity tables are outside this slice because session verification happens
+  before an actor identity exists. Buyer media reads and the artisan inquiry
+  inbox are also deferred until their visibility rules exist.
+
+See `docs/architecture/data-and-rls-contract.md` and
+`infra/database/README.md` for the current state, activation steps, and
+remaining gaps.
+
 ## Consequences
 Positive:
 - Clear persistence ownership

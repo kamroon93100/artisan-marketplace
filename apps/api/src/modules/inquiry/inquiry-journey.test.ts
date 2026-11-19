@@ -4,6 +4,11 @@ import {
   INQUIRY_PAGE_SIZE_MAX,
 } from '@artisan-marketplace/contracts';
 
+// This file's HTTP fixtures cannot pass a build mode through `app.request`.
+// The suite-scoped development build matches `actorEnv` below; production
+// call sites still omit the seam.
+process.env.NODE_ENV = 'development';
+
 /**
  * One actor per journey.
  *
@@ -88,6 +93,7 @@ async function readJson<T>(response: Response): Promise<T> {
 function actorEnv(actorId: string): Record<string, string> {
   return {
     APP_ENV: 'development',
+    LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
     DEV_OWNER_ID: actorId,
   };
 }

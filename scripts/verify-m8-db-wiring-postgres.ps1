@@ -20,21 +20,20 @@ $ErrorActionPreference = "Stop"
 # convention already used by verify-m3/m4/m5/m6/m8-actor-isolation/
 # m8-unauthenticated-401/m10.
 #
-# The connection string is read from the Hyperdrive binding in
-# wrangler.jsonc rather than duplicated here, so the local database is
-# configured in exactly one place - the same binding the proof hands to
-# the request environment.
+# The connection string is read from the documented
+# CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE environment
+# variable, so the local database credential is never committed. The same
+# binding is handed to the request environment.
 #
 # Scope guard: this proof refuses to run against anything other than the
-# repository's own project database - the Hyperdrive localConnectionString
-# on port 55432. The native PostgreSQL listening on 5432 is a different
-# instance on this machine and is never connected to, read, or written.
+# repository's own project database - the local connection string on port
+# 55432. The native PostgreSQL listening on 5432 is a different instance on
+# this machine and is never connected to, read, or written.
 
 $root = Split-Path -Parent $PSScriptRoot
 $tsx = Join-Path $root "node_modules\.bin\tsx.cmd"
 $testTsconfig = Join-Path $root "tests\m8-db-wiring\tsconfig.json"
 $suite = Join-Path $root "tests\m8-db-wiring\db-wiring-runtime.test.ts"
-$wranglerConfig = Join-Path $root "apps\api\wrangler.jsonc"
 
 # Migrations 008 and 009 are applied so the identity schema exists. They are
 # applied read-only-as-written: this runner never edits them. 001-007 are
@@ -59,19 +58,8 @@ foreach ($migration in $migrations) {
   if (-not (Test-Path $migration)) { throw "Migration not found: $migration" }
 }
 
-# Comments are stripped by dropping whole-line `//` comments only. A naive
-# `//` strip would corrupt the `postgresql://` scheme inside the connection
-# string.
-$config = (Get-Content -LiteralPath $wranglerConfig) |
-  Where-Object { $_.Trim() -notlike "//*" } |
-  Out-String |
-  ConvertFrom-Json
-
-$localConnectionString = $config.hyperdrive[0].localConnectionString.Trim()
-
-if (-not $localConnectionString) {
-  throw "No Hyperdrive localConnectionString found in $wranglerConfig"
-}
+. (Join-Path $root "scripts\lib\hyperdrive-local-connection.ps1")
+$localConnectionString = Get-HyperdriveLocalConnectionString
 
 $connection = [System.Uri]$localConnectionString
 $database = [System.Uri]::UnescapeDataString($connection.AbsolutePath.TrimStart("/"))
@@ -111,7 +99,7 @@ foreach ($migration in $migrations) {
   $ErrorActionPreference = "Continue"
   try {
     Get-Content -LiteralPath $migration -Raw |
-      docker exec -i $container psql -v ON_ERROR_STOP=1 -U $user -d $database 2>&1 |
+      docker exec -i $container psql -v ON_ERROR_STOP=1 -U artisan_marketplace -d $database 2>&1 |
       Out-Null
   }
   finally {

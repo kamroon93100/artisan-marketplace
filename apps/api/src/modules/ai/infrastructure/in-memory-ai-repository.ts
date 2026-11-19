@@ -7,9 +7,12 @@ import type {
   AiRepository,
   CreateAiJobInput,
   CreateAiJobResult,
+  CreateAiJobWithOutboxResult,
+  OutboxEventPayload,
   RecordAttemptInput,
   RecordProposalDecisionInput,
   SaveProposalsInput,
+  CompleteAttemptWithRetryOutboxInput,
 } from '../application/ai-repository.js';
 import {
   AiJobStateConflictError,
@@ -31,6 +34,12 @@ function jobKey(
  * refuses to build one outside development and test, so a deployment missing
  * its database configuration fails loudly instead of quietly serving a store
  * that loses every job.
+ *
+ * LIMITATIONS:
+ * - Does NOT persist outbox events (createJobWithOutbox returns a dummy outboxEventId)
+ * - Does NOT support the transactional outbox pattern (no ai_job_outbox table)
+ * - Does NOT support dispatcher or queue consumer
+ * - Queue consumer and dispatcher are only available with PostgresAiRepository
  */
 export class InMemoryAiRepository implements AiRepository {
   private readonly jobs = new Map<string, AiJob>();
@@ -95,6 +104,80 @@ export class InMemoryAiRepository implements AiRepository {
 
     return {
       job,
+      created: true,
+    };
+  }
+
+  async createJobWithOutbox(
+    input: CreateAiJobInput,
+    outboxPayload: OutboxEventPayload,
+  ): Promise<CreateAiJobWithOutboxResult> {
+    // For in-memory, we simulate the atomic operation by first checking for
+    // idempotency, then creating both the job and a simulated outbox event.
+    // The outbox event is not actually stored in memory since there's no
+    // dispatcher in the in-memory implementation, but we return the expected
+    // result shape for API compatibility.
+
+    if (input.idempotencyKey) {
+      const existing =
+        await this.findJobByIdempotencyKey(
+          input.ownerId,
+          input.idempotencyKey,
+        );
+
+      if (existing) {
+        // Idempotent replay: return existing job with a dummy outbox event ID
+        return {
+          job: existing,
+          outboxEventId: crypto.randomUUID(),
+          created: false,
+        };
+      }
+    }
+
+    const now = new Date().toISOString();
+
+    const job: AiJob = {
+      id: crypto.randomUUID(),
+      productId: input.productId,
+      ownerId: input.ownerId,
+      jobType: input.jobType,
+      state: 'QUEUED',
+      provider: input.provider,
+      model: input.model,
+      modelVersion: input.modelVersion,
+      promptVersion: input.promptVersion,
+      schemaVersion: input.schemaVersion,
+      pipelineVersion: input.pipelineVersion,
+      input: input.input,
+      inputHash: input.inputHash,
+      attemptCount: 0,
+      maxAttempts: input.maxAttempts,
+      correlationId: input.correlationId,
+      causationId: input.causationId,
+      idempotencyKey: input.idempotencyKey,
+      failure: null,
+      nextAttemptAt: null,
+      createdAt: now,
+      updatedAt: now,
+      startedAt: null,
+      completedAt: null,
+    };
+
+    this.jobs.set(job.id, job);
+
+    if (input.idempotencyKey) {
+      this.idempotency.set(
+        jobKey(input.ownerId, input.idempotencyKey),
+        job.id,
+      );
+    }
+
+    // Return a dummy outbox event ID since we don't actually store outbox
+    // events in memory
+    return {
+      job,
+      outboxEventId: crypto.randomUUID(),
       created: true,
     };
   }
@@ -181,6 +264,46 @@ export class InMemoryAiRepository implements AiRepository {
         completedAt: terminal
           ? new Date().toISOString()
           : job.completedAt,
+        updatedAt: new Date().toISOString(),
+      };
+    });
+  }
+
+  async completeAttemptWithRetryOutbox(
+    input: CompleteAttemptWithRetryOutboxInput,
+  ): Promise<AiJob> {
+    // For in-memory, we don't persist outbox events, but we maintain
+    // the same interface for API compatibility. For non-RETRYING states,
+    // delegate to completeAttempt.
+    if (input.nextState !== 'RETRYING') {
+      return this.completeAttempt({
+        id: input.id,
+        expectedState: input.expectedState,
+        nextState: input.nextState,
+        attemptCount: input.attemptCount,
+        failure: input.failure,
+        nextAttemptAt: input.nextAttemptAt,
+      });
+    }
+
+    // For RETRYING, we do the state update (same as completeAttempt)
+    // The outbox event is not actually persisted in memory
+    return this.updateJob(input.id, (job) => {
+      if (job.state !== input.expectedState) {
+        throw new AiJobStateConflictError(
+          input.id,
+          input.expectedState,
+          job.state,
+        );
+      }
+
+      // For RETRYING, we don't mark as terminal
+      return {
+        ...job,
+        state: input.nextState,
+        attemptCount: input.attemptCount,
+        failure: input.failure,
+        nextAttemptAt: input.nextAttemptAt,
         updatedAt: new Date().toISOString(),
       };
     });
@@ -394,5 +517,15 @@ export class InMemoryAiRepository implements AiRepository {
 
     this.jobs.set(id, updated);
     return updated;
+  }
+
+  async createOutboxEventForRetry(
+    _job: AiJob,
+    _outboxPayload: OutboxEventPayload,
+  ): Promise<string> {
+    // In-memory implementation doesn't persist outbox events.
+    // The dispatcher and queue consumer are only available with PostgresAiRepository.
+    // Return a dummy ID for API compatibility.
+    return crypto.randomUUID();
   }
 }

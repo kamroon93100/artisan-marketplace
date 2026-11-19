@@ -95,7 +95,7 @@ if (!connectionString) {
  * is cached between calls, and the `read` phase builds its own services:
  * there is no in-process object that could answer a read from memory.
  */
-function freshRigs(): {
+function freshRigs(actorId: string): {
   database: PostgresDatabase;
   aiRepository: PostgresAiRepository;
   catalogService: CatalogService;
@@ -103,7 +103,7 @@ function freshRigs(): {
   pipeline: AiPipelineService;
   review: AiReviewService;
 } {
-  const database = new PostgresDatabase(connectionString!);
+  const database = PostgresDatabase.forActor(connectionString!, actorId);
   const aiRepository = new PostgresAiRepository(database);
   const catalogService = new CatalogService(
     new PostgresCatalogRepository(database),
@@ -129,7 +129,7 @@ function freshRigs(): {
 async function writePhase(handoffPath: string): Promise<void> {
   const ownerId = randomUUID();
   const { database, aiRepository, catalogService, catalogPort, pipeline, review } =
-    freshRigs();
+    freshRigs(ownerId);
 
   // A1: a draft is canonical state that AI work can target. It has a title
   // and no description, which is the realistic case an artisan is in when
@@ -655,7 +655,7 @@ async function readPhase(handoffPath: string): Promise<void> {
   ) as Handoff;
 
   const { database, aiRepository, catalogService, pipeline, review } =
-    freshRigs();
+    freshRigs(handoff.ownerId);
 
   // B7: a failed job is durable too, with the category and diagnostic that
   // explain it. An operator diagnosing a dead AI job after a restart reads

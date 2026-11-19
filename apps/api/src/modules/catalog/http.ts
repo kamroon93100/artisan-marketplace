@@ -7,9 +7,10 @@ import type { Context } from 'hono';
 import type { ApiEnv } from '../../shared/context/api-env.js';
 import { requireActor } from '../../shared/auth/session.js';
 import {
-  productCreateLimiter,
-  productPublishLimiter,
-  rateLimitMiddleware,
+  enforceRateLimit,
+  resolveOperationRateLimiters,
+  buildOperationKey,
+  type OperationScope,
 } from '../../shared/ratelimit/index.js';
 
 export const catalogRoutes = new Hono<ApiEnv>();
@@ -68,8 +69,14 @@ function isProductState(
 
 catalogRoutes.post(
   '/products',
-  rateLimitMiddleware(productCreateLimiter, 'product creation'),
   async (c) => {
+    const limiters = resolveOperationRateLimiters(c.env);
+    await enforceRateLimit(
+      c,
+      limiters['catalog.product.create'],
+      buildOperationKey('catalog.product.create', actorId(c)),
+      'product creation',
+    );
     const body = await c.req.json<{
       title?: string;
       description?: string;
@@ -78,7 +85,7 @@ catalogRoutes.post(
     }>();
 
     const result =
-      await getCatalogService(c.env).createDraft({
+      await getCatalogService(c.env, actorId(c)).createDraft({
         ownerId: actorId(c),
         title: body.title,
         description: body.description,
@@ -98,11 +105,20 @@ catalogRoutes.post(
   },
 );
 
+/**
+ * The artisan's own product record.
+ *
+ * Publication is what makes a product readable by buyers; until then it is
+ * private working state. The read is therefore ownership-scoped here rather
+ * than reusing the module's internal unscoped lookup, which would let any
+ * authenticated actor read another artisan's draft by guessing its id.
+ */
 catalogRoutes.get('/products/:id', async (c) => {
   try {
     const product =
-      await getCatalogService(c.env).getById(
-        c.req.param('id'),
+      await getCatalogService(c.env, actorId(c)).getOwnedById(
+        productId(c),
+        actorId(c),
       );
 
     return c.json({ product });
@@ -143,7 +159,7 @@ catalogRoutes.patch('/products/:id', async (c) => {
   }>();
 
   const product =
-    await getCatalogService(c.env).update(
+    await getCatalogService(c.env, actorId(c)).update(
       productId(c),
       actorId(c),
       {
@@ -168,7 +184,7 @@ catalogRoutes.get(
   '/products/:id/versions',
   async (c) => {
     const versions =
-      await getCatalogService(c.env).listVersions(
+      await getCatalogService(c.env, actorId(c)).listVersions(
         productId(c),
         actorId(c),
       );
@@ -185,10 +201,16 @@ catalogRoutes.get(
  */
 catalogRoutes.post(
   '/products/:id/publish',
-  rateLimitMiddleware(productPublishLimiter, 'product publication'),
   async (c) => {
+    const limiters = resolveOperationRateLimiters(c.env);
+    await enforceRateLimit(
+      c,
+      limiters['catalog.product.publish'],
+      buildOperationKey('catalog.product.publish', actorId(c)),
+      'product publication',
+    );
     const result =
-      await getCatalogService(c.env).publish(
+      await getCatalogService(c.env, actorId(c)).publish(
         productId(c),
         actorId(c),
         c.req.header('idempotency-key') ?? '',
@@ -270,7 +292,7 @@ catalogRoutes.post(
 
     try {
       const product =
-        await getCatalogService(c.env).transition(
+        await getCatalogService(c.env, actorId(c)).transition(
           productId(c),
           body.state,
           actorId(c),

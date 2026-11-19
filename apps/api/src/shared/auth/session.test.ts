@@ -159,6 +159,7 @@ async function testUnconfiguredSessionFailsClosed(): Promise<void> {
       requireActor(
         { APP_ENV: 'production' },
         `Bearer ${TOKEN}`,
+        'production',
       ),
     'DEPENDENCY_FAILED',
   );
@@ -172,6 +173,7 @@ async function testUnconfiguredSessionFailsClosed(): Promise<void> {
           SESSION_TOKEN: TOKEN,
         },
         `Bearer ${TOKEN}`,
+        'production',
       ),
     'DEPENDENCY_FAILED',
   );
@@ -185,6 +187,7 @@ async function testUnconfiguredSessionFailsClosed(): Promise<void> {
           SESSION_ACTOR_ID: 'artisan-1',
         },
         `Bearer ${TOKEN}`,
+        'production',
       ),
     'DEPENDENCY_FAILED',
   );
@@ -207,6 +210,7 @@ async function testUnconfiguredSessionFailsClosed(): Promise<void> {
             DEV_OWNER_ID: 'dev-artisan',
           },
           undefined,
+          'production',
         ),
       'DEPENDENCY_FAILED',
     );
@@ -254,13 +258,90 @@ async function testDevelopmentSeamIsEnvironmentScoped(): Promise<void> {
     (await requireActor(
       {
         APP_ENV: 'development',
+        LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
         DEV_OWNER_ID: 'dev-artisan',
       },
       undefined,
+      'development',
     )).actorId,
     'dev-artisan',
     'development may act as the configured local owner',
   );
+
+  assertEqual(
+    (await requireActor(
+      {
+        APP_ENV: 'test',
+        LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+        DEV_OWNER_ID: 'dev-artisan',
+      },
+      undefined,
+      'test',
+    )).actorId,
+    'dev-artisan',
+    'test may act as the configured local owner',
+  );
+
+  for (const { label, env, buildMode } of [
+    {
+      label: 'seam denied without opt-in',
+      env: {
+        APP_ENV: 'development',
+        DEV_OWNER_ID: 'dev-artisan',
+      },
+      buildMode: 'development',
+    },
+    {
+      label: 'seam denied when build mode disagrees',
+      env: {
+        APP_ENV: 'development',
+        LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+        DEV_OWNER_ID: 'dev-artisan',
+      },
+      buildMode: 'test',
+    },
+    {
+      label: 'seam denied under production build',
+      env: {
+        APP_ENV: 'development',
+        LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+        DEV_OWNER_ID: 'dev-artisan',
+      },
+      buildMode: 'production',
+    },
+    {
+      label: 'seam denied for unknown build mode',
+      env: {
+        APP_ENV: 'development',
+        LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+        DEV_OWNER_ID: 'dev-artisan',
+      },
+      buildMode: 'staging',
+    },
+    {
+      label: 'seam denied for unknown APP_ENV',
+      env: {
+        APP_ENV: 'staging',
+        LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+        DEV_OWNER_ID: 'dev-artisan',
+      },
+      buildMode: 'development',
+    },
+    {
+      label: 'seam denied when APP_ENV is missing',
+      env: {
+        LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+        DEV_OWNER_ID: 'dev-artisan',
+      },
+      buildMode: 'test',
+    },
+  ]) {
+    await expectAppError(
+      label,
+      () => requireActor(env, undefined, buildMode),
+      'DEPENDENCY_FAILED',
+    );
+  }
 
   for (const environment of [
     'production',
@@ -281,6 +362,7 @@ async function testDevelopmentSeamIsEnvironmentScoped(): Promise<void> {
             SESSION_ACTOR_ID: 'artisan-1',
           },
           undefined,
+          'production',
         ),
       'UNAUTHENTICATED',
     );
@@ -296,6 +378,7 @@ async function testDevelopmentSeamIsEnvironmentScoped(): Promise<void> {
           SESSION_ACTOR_ID: 'artisan-1',
         },
         `Bearer ${TOKEN}`,
+        'production',
       )).actorId,
       'artisan-1',
       `a real session beats the seam in ${String(environment)}`,
@@ -308,11 +391,13 @@ async function testDevelopmentSeamIsEnvironmentScoped(): Promise<void> {
     (await requireActor(
       {
         APP_ENV: 'test',
+        LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
         DEV_OWNER_ID: 'dev-artisan',
         SESSION_TOKEN: TOKEN,
         SESSION_ACTOR_ID: 'artisan-1',
       },
       `Bearer ${TOKEN}`,
+      'test',
     )).actorId,
     'artisan-1',
     'a valid session is preferred over the local seam',

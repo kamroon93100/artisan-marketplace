@@ -3,8 +3,9 @@ import type { Context } from 'hono';
 import type { ApiEnv } from '../../shared/context/api-env.js';
 import { requireActor } from '../../shared/auth/session.js';
 import {
-  productApproveLimiter,
-  rateLimitMiddleware,
+  enforceRateLimit,
+  resolveOperationRateLimiters,
+  buildOperationKey,
 } from '../../shared/ratelimit/index.js';
 import { getReviewService } from './composition.js';
 
@@ -61,7 +62,7 @@ reviewRoutes.get(
   '/products/:id/review',
   async (c) => {
     return c.json(
-      await getReviewService(c.env).getReview(
+      await getReviewService(c.env, actorId(c)).getReview(
         routeId(c),
         actorId(c),
       ),
@@ -92,13 +93,17 @@ reviewRoutes.get(
  */
 reviewRoutes.post(
   '/products/:id/review/approve',
-  rateLimitMiddleware(
-    productApproveLimiter,
-    'Product review approval',
-  ),
   async (c) => {
+    const limiters = resolveOperationRateLimiters(c.env);
+    await enforceRateLimit(
+      c,
+      limiters['review.product.approve'],
+      buildOperationKey('review.product.approve', actorId(c)),
+      'review approval',
+    );
     const result = await getReviewService(
       c.env,
+      actorId(c),
     ).approve(routeId(c), actorId(c));
 
     return c.json({

@@ -1,6 +1,11 @@
 import app from './index.js';
 import { getIdentityService } from './modules/identity/index.js';
 
+// This file's HTTP fixtures cannot pass a build mode through `app.request`.
+// The suite-scoped test build keeps those fixtures on the same policy path
+// as the focused unit tests; production call sites still omit the seam.
+process.env.NODE_ENV = 'test';
+
 async function expectStatus(
   response: Response,
   expected: number,
@@ -34,6 +39,7 @@ type UnauthenticatedBody = {
 async function expectUnauthenticatedWire(
   env: {
     APP_ENV: string;
+    LOCAL_IN_MEMORY_AUTH_ENABLED?: string;
     SESSION_TOKEN?: string;
     SESSION_ACTOR_ID?: string;
   },
@@ -106,7 +112,13 @@ async function expectUnauthenticatedWire(
  * presented credential ever reaches the response body.
  */
 async function testUnauthenticatedErrorContractOverHttp(): Promise<void> {
-  const identity = getIdentityService({ APP_ENV: 'test' });
+  const identity = getIdentityService(
+    {
+      APP_ENV: 'test',
+      LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+    },
+    'test',
+  );
 
   if (identity === null) {
     throw new Error(
@@ -124,7 +136,10 @@ async function testUnauthenticatedErrorContractOverHttp(): Promise<void> {
   }
 
   await expectUnauthenticatedWire(
-    { APP_ENV: 'test' },
+    {
+      APP_ENV: 'test',
+      LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+    },
     {
       label: 'a revoked session',
       authorization: `Bearer ${revoked.accessToken}`,
@@ -154,7 +169,11 @@ async function testUnauthenticatedErrorContractOverHttp(): Promise<void> {
 async function main(): Promise<void> {
   await testUnauthenticatedErrorContractOverHttp();
 
-  const env = { APP_ENV: 'test', DEV_OWNER_ID: 'artisan-test-1' };
+  const env = {
+    APP_ENV: 'test',
+    LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+    DEV_OWNER_ID: 'artisan-test-1',
+  };
 
   const health = await app.request(
     new Request('http://localhost/health'),

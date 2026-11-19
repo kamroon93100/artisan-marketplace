@@ -2,6 +2,7 @@ import { AppError } from '../errors/app-error.js';
 import type { UnauthenticatedReason } from '../errors/app-error.js';
 import { constantTimeEquals } from '../security/constant-time.js';
 import type { ActorContext } from '../context/request-context.js';
+import { allowsLocalInMemoryAuthState } from '../context/auth-state-policy.js';
 import {
   getIdentityService,
   createIdentityService,
@@ -14,9 +15,15 @@ import type { PostgresConnectionValue } from '../persistence/postgres-connection
 export type SessionBindingEnv = {
   APP_ENV?: string;
   /**
+   * Local-only opt-in for process-local authentication state. The local
+   * seam is never honored unless this is exactly `true`, the application
+   * environment is explicitly local/test, and the build mode matches.
+   */
+  LOCAL_IN_MEMORY_AUTH_ENABLED?: string;
+  /**
    * Local-only seam. It is the identity a request acts as when the API
    * is not running a real session provider. It is deliberately never
-   * honored outside development and test.
+   * honored outside a policy-approved local development or test run.
    */
   DEV_OWNER_ID?: string;
   SESSION_TOKEN?: string;
@@ -42,16 +49,18 @@ export type SessionBindingEnv = {
 const BEARER_PREFIX = 'bearer ';
 
 /**
- * Environments in which the local seam may stand in for a session
- * provider. Anything else must present a verifiable session.
+ * Whether the local seam may stand in for a session provider.
+ *
+ * This is the same shared decision that governs in-memory limiters and
+ * session storage: an explicit local application environment, the local-only
+ * opt-in, and an explicitly matching non-production build mode. Anything
+ * else must present a verifiable session or fail closed.
  */
 function allowsDevelopmentSeam(
-  environment: string | undefined,
+  env: SessionBindingEnv,
+  buildMode: string | undefined,
 ): boolean {
-  return (
-    environment === 'development' ||
-    environment === 'test'
-  );
+  return allowsLocalInMemoryAuthState(env, buildMode);
 }
 
 function presentedToken(
@@ -140,6 +149,7 @@ function refusalForUnresolvedRequest(
 export async function requireActor(
   env: SessionBindingEnv,
   authorizationHeader: string | undefined,
+  buildMode: string | undefined = process.env.NODE_ENV,
 ): Promise<ActorContext> {
   const token = presentedToken(authorizationHeader);
 
@@ -150,7 +160,7 @@ export async function requireActor(
   // behavior below is unchanged, which is what keeps the configured
   // static session compatible until the approved mechanism replaces it.
   const identity =
-    token === null ? null : createIdentityService(env);
+    token === null ? null : createIdentityService(env, buildMode);
 
   // True once a real session store has looked at this credential and not
   // recognized it. From that moment the deployment has demonstrated that
@@ -260,7 +270,7 @@ export async function requireActor(
     };
   }
 
-  if (allowsDevelopmentSeam(env.APP_ENV)) {
+  if (allowsDevelopmentSeam(env, buildMode)) {
     const devOwnerId = env.DEV_OWNER_ID?.trim();
 
     if (devOwnerId) {
@@ -295,20 +305,22 @@ export async function requireActor(
 export function requireActorSync(
   env: SessionBindingEnv,
   authorizationHeader: string | undefined,
+  buildMode: string | undefined = process.env.NODE_ENV,
 ): ActorContext {
   const token = presentedToken(authorizationHeader);
 
   const identity =
-    token === null ? null : getIdentityService(env);
+    token === null ? null : getIdentityService(env, buildMode);
 
   // `getIdentityService` (the alias of `createIdentityService`) returns
-  // a PostgreSQL-backed service only outside development/test (where the
-  // in-memory store answers). For that store the only synchronous method
-  // is `all()`, a stub that never queries the database: consulting it
-  // would refuse valid sessions and strip the expired/revoked reasons,
-  // so it is not consulted at all.
+  // a PostgreSQL-backed service only when the shared policy denies the
+  // in-memory store. For that store the only synchronous method is `all()`,
+  // a stub that never queries the database: consulting it would refuse
+  // valid sessions and strip the expired/revoked reasons, so it is not
+  // consulted at all.
   const durableIdentity =
-    identity !== null && !allowsInMemorySessionStore(env.APP_ENV);
+    identity !== null &&
+    !allowsInMemorySessionStore(env, buildMode);
 
   // Same meaning as in `requireActor`: the store judged this credential
   // and did not recognize it, so this deployment can verify a session.
@@ -366,7 +378,7 @@ export function requireActorSync(
     };
   }
 
-  if (allowsDevelopmentSeam(env.APP_ENV)) {
+  if (allowsDevelopmentSeam(env, buildMode)) {
     const devOwnerId = env.DEV_OWNER_ID?.trim();
 
     if (devOwnerId) {

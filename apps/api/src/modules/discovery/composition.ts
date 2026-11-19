@@ -27,10 +27,11 @@ export type DiscoveryBindingEnv = DatabaseBindingEnv;
  */
 export function getDiscoveryService(
   env: DiscoveryBindingEnv,
+  actorId?: string,
 ): DiscoveryService {
   return new DiscoveryService(
     new CatalogServicePublishedCatalogReadPort(
-      getCatalogService(env),
+      getCatalogService(env, actorId),
     ),
   );
 }

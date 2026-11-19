@@ -166,9 +166,11 @@ const VERSION_SELECT_COLUMNS = `
  *
  * 1. **It never reads the working draft.** Every column comes from
  *    `catalog_versions`, and the join pins the version to the one the
- *    product currently has published. `catalog_products` is joined for its
- *    pointer and its archive flag and contributes no listing value, so a
- *    draft edit cannot reach a buyer through this path.
+ *    product currently has published. `catalog_products` is joined only
+ *    through `app.published_catalog_products`, a narrow security-definer
+ *    view that exposes the product id, published version, and lifecycle
+ *    state and nothing else. Row-level security can therefore deny buyers
+ *    the working row entirely while still allowing discovery to answer.
  *
  * 2. **A never-published product cannot appear.** The join requires
  *    `v.version_number = p.published_version`, which is unsatisfiable while
@@ -732,7 +734,7 @@ export class PostgresCatalogRepository
       `
         SELECT ${PUBLISHED_SELECT_COLUMNS}
         FROM catalog_versions v
-        JOIN catalog_products p
+        JOIN app.published_catalog_products p
           ON p.id = v.product_id
          AND v.version_number = p.published_version
         WHERE p.id = $1
@@ -774,7 +776,7 @@ export class PostgresCatalogRepository
         `
           SELECT count(*) AS total
           FROM catalog_versions v
-          JOIN catalog_products p
+          JOIN app.published_catalog_products p
             ON p.id = v.product_id
            AND v.version_number = p.published_version
           WHERE ${PUBLISHED_VISIBILITY_PREDICATE}
@@ -790,7 +792,7 @@ export class PostgresCatalogRepository
       `
         SELECT ${PUBLISHED_SELECT_COLUMNS}
         FROM catalog_versions v
-        JOIN catalog_products p
+        JOIN app.published_catalog_products p
           ON p.id = v.product_id
          AND v.version_number = p.published_version
         WHERE ${PUBLISHED_VISIBILITY_PREDICATE}

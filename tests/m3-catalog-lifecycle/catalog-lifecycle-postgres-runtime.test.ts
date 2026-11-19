@@ -3,6 +3,10 @@ import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 
 import { CatalogService } from "../../apps/api/src/modules/catalog/application/catalog-service.ts";
+import { PostgresAiRepository } from "../../apps/api/src/modules/ai/infrastructure/postgres-ai-repository.ts";
+import { ReviewService } from "../../apps/api/src/modules/review/application/review-service.ts";
+import { CatalogServiceReviewProductPort } from "../../apps/api/src/modules/review/infrastructure/catalog-review-port.ts";
+import { AiRepositoryReviewSuggestionsPort } from "../../apps/api/src/modules/review/infrastructure/ai-suggestions-port.ts";
 import { PostgresCatalogRepository } from "../../apps/api/src/modules/catalog/infrastructure/postgres-catalog-repository.ts";
 import { PostgresDatabase } from "../../apps/api/src/shared/persistence/postgres-database.ts";
 import { AppError } from "../../apps/api/src/shared/errors/app-error.ts";
@@ -55,18 +59,27 @@ if (!connectionString) {
  * what the `read` phase uses: there is no in-process object that could
  * answer a read from memory.
  */
-function freshService(): {
+function freshService(actorId: string): {
   service: CatalogService;
   repository: PostgresCatalogRepository;
   database: PostgresDatabase;
+  review: ReviewService;
 } {
-  const database = new PostgresDatabase(connectionString!);
+  const database = PostgresDatabase.forActor(connectionString!, actorId);
   const repository = new PostgresCatalogRepository(database);
+  const service = new CatalogService(repository);
+  const review = new ReviewService(
+    new CatalogServiceReviewProductPort(service),
+    new AiRepositoryReviewSuggestionsPort(
+      new PostgresAiRepository(database),
+    ),
+  );
 
   return {
     database,
     repository,
-    service: new CatalogService(repository),
+    service,
+    review,
   };
 }
 
@@ -92,7 +105,7 @@ async function advance(
  */
 async function writePhase(handoffPath: string): Promise<void> {
   const ownerId = randomUUID();
-  const { service, repository, database } = freshService();
+  const { service, repository, database, review } = freshService(ownerId);
 
   // A1: a draft is canonical, durable state with no published version.
   const draft = (
@@ -121,15 +134,9 @@ async function writePhase(handoffPath: string): Promise<void> {
   );
 
   // A2: the pre-review lifecycle persists.
-  const approved = await advance(
-    service,
-    draft.id,
-    ownerId,
-    "PENDING_SYNC",
-    "SYNCED",
-    "REVIEW_REQUIRED",
-    "APPROVED",
-  );
+  await advance(service, draft.id, ownerId, "PENDING_SYNC", "SYNCED", "REVIEW_REQUIRED");
+  await review.approve(draft.id, ownerId);
+  const approved = await service.getById(draft.id);
   assert.equal(approved.state, "APPROVED");
 
   // A3a: the compare-and-set is real. A stale expected state matches no
@@ -253,7 +260,7 @@ async function writePhase(handoffPath: string): Promise<void> {
     "an edit to one field leaves the others alone",
   );
 
-  await advance(service, draft.id, ownerId, "APPROVED");
+  await review.approve(draft.id, ownerId);
 
   const republished = await service.publish(
     draft.id,
@@ -329,7 +336,7 @@ async function readPhase(handoffPath: string): Promise<void> {
     readFileSync(handoffPath, "utf8"),
   ) as Handoff;
 
-  const { service } = freshService();
+  const { service } = freshService(handoff.ownerId);
 
   const product = await service.getById(handoff.productId);
 

@@ -103,13 +103,13 @@ if (!connectionString) {
  * another module's tables, so the proof also shows the boundaries hold
  * against a real database rather than only in review.
  */
-function freshRigs(): {
+function freshRigs(actorId: string): {
   database: PostgresDatabase;
   catalog: CatalogService;
   discovery: DiscoveryService;
   inquiry: InquiryService;
 } {
-  const database = new PostgresDatabase(connectionString!);
+  const database = PostgresDatabase.forActor(connectionString!, actorId);
   const catalog = new CatalogService(
     new PostgresCatalogRepository(database),
   );
@@ -211,7 +211,10 @@ async function writePhase(handoffPath: string): Promise<void> {
   // can be asserted against each other.
   const pairToken = `pair-${shortToken()}`;
 
-  const { database, catalog, discovery, inquiry } = freshRigs();
+  const { database, catalog, discovery } = freshRigs(ownerId);
+  const buyerRig = freshRigs(buyerId);
+  const otherBuyerRig = freshRigs(otherBuyerId);
+  const { database: buyerDatabase, inquiry } = buyerRig;
 
   // -------------------------------------------------------------------
   // A1: the published fixture an artisan can actually produce.
@@ -708,7 +711,7 @@ async function writePhase(handoffPath: string): Promise<void> {
     "the original message is unchanged by the retry",
   );
 
-  const inquiryRows = await database.query<{ count: string | number }>(
+  const inquiryRows = await buyerDatabase.query<{ count: string | number }>(
     "select count(*) as count from inquiries where buyer_id = $1 and idempotency_key = $2",
     [buyerId, idempotencyKey],
   );
@@ -720,7 +723,7 @@ async function writePhase(handoffPath: string): Promise<void> {
   );
 
   // The same key from a different buyer is a different intention.
-  const otherBuyerInquiry = await inquiry.create({
+  const otherBuyerInquiry = await otherBuyerRig.inquiry.create({
     productId: publishedProductId,
     message: inquiryMessage,
     idempotencyKey,
@@ -747,7 +750,7 @@ async function writePhase(handoffPath: string): Promise<void> {
   assert.equal(own.limit, 20, "the applied limit is reported back");
   assert.equal(own.inquiries[0].id, created.inquiry.id);
 
-  const otherOwn = await inquiry.listOwn(otherBuyerId, {});
+  const otherOwn = await otherBuyerRig.inquiry.listOwn(otherBuyerId, {});
 
   assert.equal(
     otherOwn.total,
@@ -759,15 +762,16 @@ async function writePhase(handoffPath: string): Promise<void> {
   // A15: another actor cannot read the inquiry.
   // -------------------------------------------------------------------
   const thirdBuyerId = randomUUID();
+  const thirdBuyerInquiry = freshRigs(thirdBuyerId).inquiry;
 
   await assert.rejects(
-    () => inquiry.getOwn(created.inquiry.id, thirdBuyerId),
+    () => thirdBuyerInquiry.getOwn(created.inquiry.id, thirdBuyerId),
     (error: unknown) =>
       error instanceof AppError && error.code === "NOT_FOUND",
     "another buyer's inquiry is not found rather than forbidden, so reading it discloses nothing",
   );
 
-  const thirdList = await inquiry.listOwn(thirdBuyerId, {});
+  const thirdList = await thirdBuyerInquiry.listOwn(thirdBuyerId, {});
 
   assert.equal(
     thirdList.total,
@@ -785,7 +789,7 @@ async function writePhase(handoffPath: string): Promise<void> {
   // published, even from a writer that skipped the service.
   await assert.rejects(
     () =>
-      database.query(
+      buyerDatabase.query(
         `insert into inquiries (
            id, buyer_id, product_id, catalog_version, message, status,
            idempotency_key, created_at, updated_at
@@ -803,7 +807,7 @@ async function writePhase(handoffPath: string): Promise<void> {
   // service, so a concurrent retry cannot slip past it.
   await assert.rejects(
     () =>
-      database.query(
+      buyerDatabase.query(
         `insert into inquiries (
            id, buyer_id, product_id, catalog_version, message, status,
            idempotency_key, created_at, updated_at
@@ -822,7 +826,7 @@ async function writePhase(handoffPath: string): Promise<void> {
   // depend on which layer noticed first.
   await assert.rejects(
     () =>
-      database.query(
+      buyerDatabase.query(
         `insert into inquiries (
            id, buyer_id, product_id, catalog_version, message, status,
            idempotency_key, created_at, updated_at
@@ -874,7 +878,10 @@ async function readPhase(handoffPath: string): Promise<void> {
   const handoff = JSON.parse(
     readFileSync(handoffPath, "utf8"),
   ) as Handoff;
-  const { database, catalog, discovery, inquiry } = freshRigs();
+  const { database, catalog, discovery } = freshRigs(handoff.ownerId);
+  const buyerRig = freshRigs(handoff.buyerId);
+  const otherBuyerRig = freshRigs(handoff.otherBuyerId);
+  const { database: buyerDatabase, inquiry } = buyerRig;
 
   // B1: the buyer journey still works, in a process that holds nothing.
   const found = await discovery.search(
@@ -1017,7 +1024,7 @@ async function readPhase(handoffPath: string): Promise<void> {
     "with the original message unchanged",
   );
 
-  const rows = await database.query<{ count: string | number }>(
+  const rows = await buyerDatabase.query<{ count: string | number }>(
     "select count(*) as count from inquiries where buyer_id = $1 and idempotency_key = $2",
     [handoff.buyerId, handoff.idempotencyKey],
   );
@@ -1037,7 +1044,7 @@ async function readPhase(handoffPath: string): Promise<void> {
   );
 
   // B8: the second buyer's own inquiry is separate and still theirs.
-  const otherList = await inquiry.listOwn(handoff.otherBuyerId, {});
+  const otherList = await otherBuyerRig.inquiry.listOwn(handoff.otherBuyerId, {});
 
   assert.equal(otherList.total, 1, "the other buyer still has their own inquiry");
   assert.notEqual(
@@ -1051,7 +1058,7 @@ async function readPhase(handoffPath: string): Promise<void> {
 
   await assert.rejects(
     () =>
-      database.query(
+      buyerDatabase.query(
         `insert into inquiries (
            id, buyer_id, product_id, catalog_version, message, status,
            idempotency_key, created_at, updated_at

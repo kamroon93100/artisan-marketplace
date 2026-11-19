@@ -1,4 +1,7 @@
-import { getLocalDatabase } from './database';
+import {
+  getLocalDatabase,
+  requireLocalOwnerId,
+} from './database';
 
 export const LOCAL_MEDIA_STATES = [
   'PENDING_SYNC',
@@ -156,17 +159,20 @@ function mapSyncRow(
 }
 
 export async function createLocalMediaIntent(
+  ownerId: string,
   input: CreateLocalMediaIntentInput,
 ): Promise<LocalMediaIntent> {
+  const owner = requireLocalOwnerId(ownerId);
   const db = await getLocalDatabase();
   const now = new Date().toISOString();
   const operationId = `${input.localId}:CREATE_MEDIA_ATTACHMENT`;
 
   await db.withExclusiveTransactionAsync(async (txn) => {
-    await txn.runAsync(
+    const inserted = await txn.runAsync(
       `
         INSERT INTO media_intents (
           local_id,
+          owner_id,
           product_id,
           kind,
           uri,
@@ -179,9 +185,18 @@ export async function createLocalMediaIntent(
           created_at,
           updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING_SYNC', NULL, NULL, ?, ?)
+        SELECT
+          ?, ?, ?, ?, ?, ?, ?, ?,
+          'PENDING_SYNC', NULL, NULL, ?, ?
+        WHERE EXISTS (
+          SELECT 1
+          FROM local_product_drafts
+          WHERE local_id = ?
+            AND owner_id = ?
+        )
       `,
       input.localId,
+      owner,
       input.productId,
       input.kind,
       input.uri,
@@ -190,12 +205,27 @@ export async function createLocalMediaIntent(
       input.idempotencyKey,
       now,
       now,
+      input.productId,
+      owner,
     );
+
+    /**
+     * A media record may only be attached to a draft the same account can
+     * read. Without this, a caller holding another account's local draft
+     * id could create a record that the next sync would either strand or
+     * try to upload against a product it does not own.
+     */
+    if (inserted.changes !== 1) {
+      throw new Error(
+        'The product draft does not belong to this account.',
+      );
+    }
 
     await txn.runAsync(
       `
         INSERT INTO sync_operations (
           operation_id,
+          owner_id,
           operation_type,
           aggregate_id,
           idempotency_key,
@@ -208,6 +238,7 @@ export async function createLocalMediaIntent(
           updated_at
         )
         VALUES (
+          ?,
           ?,
           'CREATE_MEDIA_ATTACHMENT',
           ?,
@@ -222,6 +253,7 @@ export async function createLocalMediaIntent(
         )
       `,
       operationId,
+      owner,
       input.localId,
       input.idempotencyKey,
       now,
@@ -246,8 +278,10 @@ export async function createLocalMediaIntent(
         updated_at
       FROM media_intents
       WHERE local_id = ?
+        AND owner_id = ?
     `,
     input.localId,
+    owner,
   );
 
   if (!row) {
@@ -260,8 +294,10 @@ export async function createLocalMediaIntent(
 }
 
 export async function getSyncOperation(
+  ownerId: string,
   operationId: string,
 ): Promise<SyncOperation | null> {
+  const owner = requireLocalOwnerId(ownerId);
   const db = await getLocalDatabase();
 
   const row = await db.getFirstAsync<Record<string, unknown>>(
@@ -280,16 +316,20 @@ export async function getSyncOperation(
         updated_at
       FROM sync_operations
       WHERE operation_id = ?
+        AND owner_id = ?
     `,
     operationId,
+    owner,
   );
 
   return row ? mapSyncRow(row) : null;
 }
 
 export async function listLocalMediaIntents(
+  ownerId: string,
   productId: string,
 ): Promise<LocalMediaIntent[]> {
+  const owner = requireLocalOwnerId(ownerId);
   const db = await getLocalDatabase();
 
   const rows = await db.getAllAsync<Record<string, unknown>>(
@@ -309,9 +349,11 @@ export async function listLocalMediaIntents(
         updated_at
       FROM media_intents
       WHERE product_id = ?
+        AND owner_id = ?
       ORDER BY created_at ASC
     `,
     productId,
+    owner,
   );
 
   return rows.map(mapMediaRow);

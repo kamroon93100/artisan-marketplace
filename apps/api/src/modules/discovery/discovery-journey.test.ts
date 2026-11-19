@@ -3,13 +3,108 @@ import {
   DISCOVERY_PAGE_SIZE_MAX,
   DISCOVERY_SEARCH_MAX_LENGTH,
 } from '@artisan-marketplace/contracts';
+import { resetInMemoryOperationRateLimiters } from '../../shared/ratelimit/operation-rate-limit.js';
+
+// This file's HTTP fixtures cannot pass a build mode through `app.request`.
+// The suite-scoped development build matches the local environments below;
+// production call sites still omit the seam.
+process.env.NODE_ENV = 'development';
 
 const ARTISAN = '00000000-0000-4000-8000-000000000001';
 
 const ARTISAN_ENV = {
   APP_ENV: 'development',
+  LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
   DEV_OWNER_ID: ARTISAN,
 };
+
+/**
+ * Rate limit enforcement test environment using a fake Durable Object
+ * namespace that actually enforces limits.
+ *
+ * This mimics the pattern from operation-rate-limit.test.ts:createEnforcingDurableNamespace()
+ * but targets the actual HTTP routes rather than the limiter API directly.
+ */
+function createEnforcingDurableNamespace(): {
+  namespace: DurableObjectNamespace;
+  checks: Array<{
+    objectName: string;
+    url: string;
+    method: string | undefined;
+    body: { limit: number; windowMs: number; now: number };
+  }>;
+  subjectByObjectName: Map<string, string>;
+} {
+  const checks: Array<{
+    objectName: string;
+    url: string;
+    method: string | undefined;
+    body: { limit: number; windowMs: number; now: number };
+  }> = [];
+  const subjectByObjectName = new Map<string, string>();
+  const callCounts = new Map<string, number>();
+
+  const namespace = {
+    idFromName(name: string) {
+      return name as unknown as DurableObjectId;
+    },
+    get(id: DurableObjectId) {
+      const objectName = String(id);
+      return {
+        async fetch(input: RequestInfo | URL, init?: RequestInit) {
+          const body = JSON.parse(String(init?.body)) as { limit: number; windowMs: number; now: number };
+          const count = (callCounts.get(objectName) || 0) + 1;
+          callCounts.set(objectName, count);
+
+          const check = {
+            objectName,
+            url: String(input),
+            method: init?.method,
+            body,
+          };
+          checks.push(check);
+
+          // Enforce limit per objectName based on the policy in the request body
+          if (count > body.limit) {
+            return new Response(
+              JSON.stringify({
+                allowed: false,
+                remaining: 0,
+                resetAt: Date.now() + 60_000,
+              }),
+              {
+                status: 200,
+                headers: { 'content-type': 'application/json' },
+              },
+            );
+          }
+
+          return new Response(
+            JSON.stringify({
+              allowed: true,
+              remaining: body.limit - count,
+              resetAt: Date.now() + 60_000,
+            }),
+            {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            },
+          );
+        },
+      } as unknown as DurableObjectStub;
+    },
+  } as unknown as DurableObjectNamespace;
+
+  return { namespace, checks, subjectByObjectName };
+}
+
+async function hashRateLimitSubject(subject: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(subject);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
 
 /**
  * Discovery is read-only, so these journeys drive the artisan side through
@@ -20,6 +115,7 @@ const ARTISAN_ENV = {
  */
 const BUYER_ENV = {
   APP_ENV: 'development',
+  LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
   DEV_OWNER_ID: '00000000-0000-4000-8000-0000000000b1',
 };
 
@@ -279,6 +375,7 @@ function assertBuyerSafePayload(
  * â€” through either discovery route.
  */
 async function testVisibilityThroughEveryRoute(): Promise<void> {
+  resetInMemoryOperationRateLimiters();
   const published = await publishProduct('visible');
 
   const list = await buyerRequest('/discovery/products');
@@ -352,6 +449,7 @@ async function testVisibilityThroughEveryRoute(): Promise<void> {
  * a behaviour rather than a schema.
  */
 async function testDraftEditDoesNotChangeThePublishedListing(): Promise<void> {
+  resetInMemoryOperationRateLimiters();
   const published = await publishProduct('immutable');
 
   const before = await readJson<{ product: PublishedPayload }>(
@@ -417,6 +515,7 @@ async function testDraftEditDoesNotChangeThePublishedListing(): Promise<void> {
  * both routes at once.
  */
 async function testArchivingRemovesTheListing(): Promise<void> {
+  resetInMemoryOperationRateLimiters();
   const published = await publishProduct('archived');
 
   await artisanRequest(
@@ -456,6 +555,7 @@ async function testArchivingRemovesTheListing(): Promise<void> {
  * page happened to be small".
  */
 async function testSearchAndPagination(): Promise<void> {
+  resetInMemoryOperationRateLimiters();
   const basket = await publishProduct('search-basket', {
     materials: ['bamboo', 'unsearchable-fibre-token'],
   });
@@ -641,6 +741,7 @@ async function testSearchAndPagination(): Promise<void> {
  * forwarded to the catalog as if it were a search.
  */
 async function testValidationAndErrorCategories(): Promise<void> {
+  resetInMemoryOperationRateLimiters();
   for (const query of [
     'limit=0',
     `limit=${DISCOVERY_PAGE_SIZE_MAX + 1}`,
@@ -692,6 +793,7 @@ async function testValidationAndErrorCategories(): Promise<void> {
  * discovery route.
  */
 async function testProductIdValidation(): Promise<void> {
+  resetInMemoryOperationRateLimiters();
   const malformed = await buyerRequest(
     '/discovery/products/not-a-valid-product-id',
   );
@@ -729,6 +831,7 @@ async function testProductIdValidation(): Promise<void> {
   );
 }
 async function testBuyerPayloadsAreFieldChecked(): Promise<void> {
+  resetInMemoryOperationRateLimiters();
   const published = await publishProduct('fields');
 
   const list = await readJson<unknown>(
@@ -758,6 +861,7 @@ async function testBuyerPayloadsAreFieldChecked(): Promise<void> {
  * could change anything.
  */
 async function testDiscoveryIsReadOnly(): Promise<void> {
+  resetInMemoryOperationRateLimiters();
   const published = await publishProduct('readonly');
 
   for (const [method, path] of [
@@ -790,6 +894,430 @@ async function testDiscoveryIsReadOnly(): Promise<void> {
   );
 }
 
+/**
+ * Regression test: discovery.search rate limit enforced at HTTP level.
+ * Uses development resolver with in-memory rate limiters.
+ * 60 requests allowed per 60s window per actor, 61st returns 429 RATE_LIMITED.
+ */
+async function testDiscoverySearchRateLimitHttp(): Promise<void> {
+  resetInMemoryOperationRateLimiters();
+  // Publish a product to search for
+  const published = await publishProduct('search-rate-limit');
+
+  // Development environment with in-memory rate limiters
+  const actorId = '00000000-0000-4000-8000-0000000000b2';
+  const testEnv = {
+    APP_ENV: 'development',
+    LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+    DEV_OWNER_ID: actorId,
+  };
+
+  // First 60 requests should succeed (limit is 60)
+  for (let i = 0; i < 60; i++) {
+    const response = await app.request(
+      '/discovery/products',
+      { method: 'GET' },
+      testEnv,
+    );
+    expect(
+      response.status === 200,
+      `Request ${i + 1} should succeed, got ${response.status}`,
+    );
+    expect(
+      response.headers.get('x-ratelimit-remaining') !== null,
+      `Request ${i + 1} should have x-ratelimit-remaining header`,
+    );
+    expect(
+      response.headers.get('x-ratelimit-reset') !== null,
+      `Request ${i + 1} should have x-ratelimit-reset header`,
+    );
+    expect(
+      response.headers.get('retry-after') === null,
+      `Request ${i + 1} should not have retry-after header`,
+    );
+  }
+
+  // 61st request should be denied with 429
+  const deniedResponse = await app.request(
+    '/discovery/products',
+    { method: 'GET' },
+    testEnv,
+  );
+
+  expect(
+    deniedResponse.status === 429,
+    `61st request should return 429, got ${deniedResponse.status}`,
+  );
+
+  const deniedBody = await readJson<{ error: { code: string; details?: { resetAt?: number } } }>(deniedResponse);
+  expect(
+    deniedBody.error.code === 'RATE_LIMITED',
+    `Expected RATE_LIMITED, got ${deniedBody.error.code}`,
+  );
+  expect(
+    deniedResponse.headers.get('x-ratelimit-remaining') === '0',
+    'Denied response should have x-ratelimit-remaining: 0',
+  );
+  expect(
+    deniedResponse.headers.get('x-ratelimit-reset') !== null,
+    'Denied response should have x-ratelimit-reset header',
+  );
+  expect(
+    Number(deniedResponse.headers.get('retry-after')) > 0,
+    'Denied response should have positive retry-after header',
+  );
+}
+
+/**
+ * Regression test: discovery.read rate limit enforced at HTTP level.
+ * Uses development resolver with in-memory rate limiters.
+ * 120 requests allowed per 60s window per actor, 121st returns 429 RATE_LIMITED.
+ */
+async function testDiscoveryReadRateLimitHttp(): Promise<void> {
+  resetInMemoryOperationRateLimiters();
+  // Publish a product to read
+  const published = await publishProduct('read-rate-limit');
+
+  // Development environment with in-memory rate limiters
+  const actorId = '00000000-0000-4000-8000-0000000000b3';
+  const testEnv = {
+    APP_ENV: 'development',
+    LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+    DEV_OWNER_ID: actorId,
+  };
+
+  // First 120 requests should succeed (limit is 120)
+  for (let i = 0; i < 120; i++) {
+    const response = await app.request(
+      `/discovery/products/${published.id}`,
+      { method: 'GET' },
+      testEnv,
+    );
+    expect(
+      response.status === 200,
+      `Request ${i + 1} should succeed, got ${response.status}`,
+    );
+    expect(
+      response.headers.get('x-ratelimit-remaining') !== null,
+      `Request ${i + 1} should have x-ratelimit-remaining header`,
+    );
+    expect(
+      response.headers.get('x-ratelimit-reset') !== null,
+      `Request ${i + 1} should have x-ratelimit-reset header`,
+    );
+    expect(
+      response.headers.get('retry-after') === null,
+      `Request ${i + 1} should not have retry-after header`,
+    );
+  }
+
+  // 121st request should be denied with 429
+  const deniedResponse = await app.request(
+    `/discovery/products/${published.id}`,
+    { method: 'GET' },
+    testEnv,
+  );
+
+  expect(
+    deniedResponse.status === 429,
+    `121st request should return 429, got ${deniedResponse.status}`,
+  );
+
+  const deniedBody = await readJson<{ error: { code: string; details?: { resetAt?: number } } }>(deniedResponse);
+  expect(
+    deniedBody.error.code === 'RATE_LIMITED',
+    `Expected RATE_LIMITED, got ${deniedBody.error.code}`,
+  );
+  expect(
+    deniedResponse.headers.get('x-ratelimit-remaining') === '0',
+    'Denied response should have x-ratelimit-remaining: 0',
+  );
+  expect(
+    deniedResponse.headers.get('x-ratelimit-reset') !== null,
+    'Denied response should have x-ratelimit-reset header',
+  );
+  expect(
+    Number(deniedResponse.headers.get('retry-after')) > 0,
+    'Denied response should have positive retry-after header',
+  );
+}
+
+/**
+ * Regression test: discovery.search and discovery.read have independent budgets.
+ * Uses development resolver with in-memory rate limiters.
+ * Exhausting search budget does not affect read budget, and vice versa.
+ */
+async function testDiscoverySearchAndReadIndependentBudgets(): Promise<void> {
+  resetInMemoryOperationRateLimiters();
+  // Publish a product
+  const published = await publishProduct('independent-budgets');
+
+  // Development environment with in-memory rate limiters
+  const actorId = '00000000-0000-4000-8000-0000000000b4';
+  const testEnv = {
+    APP_ENV: 'development',
+    LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+    DEV_OWNER_ID: actorId,
+  };
+
+  // Exhaust search budget (60 requests)
+  for (let i = 0; i < 60; i++) {
+    const response = await app.request(
+      '/discovery/products',
+      { method: 'GET' },
+      testEnv,
+    );
+    expect(response.status === 200, `Search request ${i + 1} should succeed`);
+  }
+  // 61st search should be denied
+  const deniedSearch = await app.request(
+    '/discovery/products',
+    { method: 'GET' },
+    testEnv,
+  );
+  expect(deniedSearch.status === 429, 'Search should be denied after limit');
+
+  // Read budget should still be fully available (120 requests)
+  for (let i = 0; i < 120; i++) {
+    const response = await app.request(
+      `/discovery/products/${published.id}`,
+      { method: 'GET' },
+      testEnv,
+    );
+    expect(response.status === 200, `Read request ${i + 1} should succeed`);
+  }
+  // 121st read should be denied
+  const deniedRead = await app.request(
+    `/discovery/products/${published.id}`,
+    { method: 'GET' },
+    testEnv,
+  );
+  expect(deniedRead.status === 429, 'Read should be denied after its own limit');
+
+  // Verify different scopes have different rate limit keys (implicitly tested by independent budgets)
+  // The in-memory limiters use buildOperationKey which includes the scope, so they're independent.
+}
+
+/**
+ * Regression test: discovery rate limit subject is derived from authenticated actor.
+ * Different actors have independent budgets for the same operation.
+ */
+async function testDiscoveryRateLimitActorIsolation(): Promise<void> {
+  resetInMemoryOperationRateLimiters();
+  const { namespace, checks, subjectByObjectName } = createEnforcingDurableNamespace();
+
+  // Publish a product
+  const published = await publishProduct('actor-isolation');
+
+  // Actor 1 environment with static session
+  // Use APP_ENV: 'test' with LOCAL_IN_MEMORY_AUTH_ENABLED: 'true' to enable
+  // in-memory repository while still using DO rate limiter (because buildMode
+  // is 'development' and APP_ENV 'test' != buildMode 'development').
+  const actor1Token = 'test-actor1-token';
+  const actor1Id = '00000000-0000-4000-8000-0000000000c1';
+  const actor1Env = {
+    APP_ENV: 'test',
+    LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+    AUTH_RATE_LIMITER: namespace,
+    SESSION_TOKEN: actor1Token,
+    SESSION_ACTOR_ID: actor1Id,
+  };
+
+  // Actor 2 environment with static session
+  const actor2Token = 'test-actor2-token';
+  const actor2Id = '00000000-0000-4000-8000-0000000000c2';
+  const actor2Env = {
+    APP_ENV: 'test',
+    LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+    AUTH_RATE_LIMITER: namespace,
+    SESSION_TOKEN: actor2Token,
+    SESSION_ACTOR_ID: actor2Id,
+  };
+
+  const actor1SearchKey = `discovery.search:${actor1Id}`;
+  const actor2SearchKey = `discovery.search:${actor2Id}`;
+  const actor1SearchHash = await hashRateLimitSubject(actor1SearchKey);
+  const actor2SearchHash = await hashRateLimitSubject(actor2SearchKey);
+  subjectByObjectName.set(actor1SearchHash, actor1SearchKey);
+  subjectByObjectName.set(actor2SearchHash, actor2SearchKey);
+
+  // Exhaust actor1's search budget (60 requests)
+  for (let i = 0; i < 60; i++) {
+    const response = await app.request(
+      '/discovery/products',
+      {
+        method: 'GET',
+        headers: { authorization: `Bearer ${actor1Token}` },
+      },
+      actor1Env,
+    );
+    expect(response.status === 200, `Actor1 search ${i + 1} should succeed`);
+  }
+  const actor1Denied = await app.request(
+    '/discovery/products',
+    {
+      method: 'GET',
+      headers: { authorization: `Bearer ${actor1Token}` },
+    },
+    actor1Env,
+  );
+  expect(actor1Denied.status === 429, 'Actor1 should be denied after 60 searches');
+
+  // Actor2 should still have full budget (60 requests)
+  for (let i = 0; i < 60; i++) {
+    const response = await app.request(
+      '/discovery/products',
+      {
+        method: 'GET',
+        headers: { authorization: `Bearer ${actor2Token}` },
+      },
+      actor2Env,
+    );
+    expect(response.status === 200, `Actor2 search ${i + 1} should succeed`);
+  }
+
+  // Verify different actors have different hashed subjects
+  expect(actor1SearchHash !== actor2SearchHash, 'different actors should have different hashed subjects');
+
+  // Verify DO calls tracked separately
+  const actor1Checks = checks.filter(c => c.objectName === actor1SearchHash);
+  const actor2Checks = checks.filter(c => c.objectName === actor2SearchHash);
+  expect(actor1Checks.length === 61, 'actor1 should have 61 DO checks');
+  expect(actor2Checks.length === 60, 'actor2 should have 60 DO checks');
+}
+
+/**
+ * Regression test: discovery rate limiting fails closed in production
+ * without AUTH_RATE_LIMITER binding.
+ */
+async function testDiscoveryRateLimitFailsClosedProduction(): Promise<void> {
+  resetInMemoryOperationRateLimiters();
+  const sessionToken = 'test-fail-closed-token';
+  const actorId = '00000000-0000-4000-8000-0000000000d1';
+
+  const testEnv = {
+    APP_ENV: 'production',
+    // No AUTH_RATE_LIMITER binding
+    SESSION_TOKEN: sessionToken,
+    SESSION_ACTOR_ID: actorId,
+  };
+
+  // Publish a product
+  const published = await publishProduct('fail-closed');
+
+  // Search should fail with 503 DEPENDENCY_FAILED (rate limiter fails closed)
+  const searchResponse = await app.request(
+    '/discovery/products',
+    {
+      method: 'GET',
+      headers: { authorization: `Bearer ${sessionToken}` },
+    },
+    testEnv,
+  );
+  expect(searchResponse.status === 503, `Search should return 503, got ${searchResponse.status}`);
+  const searchBody = await readJson<{ error: { code: string } }>(searchResponse);
+  expect(searchBody.error.code === 'DEPENDENCY_FAILED', `Search should return DEPENDENCY_FAILED, got ${searchBody.error.code}`);
+
+  // Read should fail with 503 DEPENDENCY_FAILED (rate limiter fails closed)
+  const readResponse = await app.request(
+    `/discovery/products/${published.id}`,
+    {
+      method: 'GET',
+      headers: { authorization: `Bearer ${sessionToken}` },
+    },
+    testEnv,
+  );
+  expect(readResponse.status === 503, `Read should return 503, got ${readResponse.status}`);
+  const readBody = await readJson<{ error: { code: string } }>(readResponse);
+  expect(readBody.error.code === 'DEPENDENCY_FAILED', `Read should return DEPENDENCY_FAILED, got ${readBody.error.code}`);
+}
+
+/**
+ * Regression test: successful discovery responses include rate limit headers
+ * and response contracts remain unchanged.
+ */
+async function testDiscoveryRateLimitHeadersAndContract(): Promise<void> {
+  resetInMemoryOperationRateLimiters();
+  const { namespace, checks, subjectByObjectName } = createEnforcingDurableNamespace();
+
+  // Publish a product
+  const published = await publishProduct('headers-contract');
+
+  const sessionToken = 'test-headers-token';
+  const actorId = '00000000-0000-4000-8000-0000000000e1';
+
+  const testEnv = {
+    APP_ENV: 'test',
+    LOCAL_IN_MEMORY_AUTH_ENABLED: 'true',
+    AUTH_RATE_LIMITER: namespace,
+    SESSION_TOKEN: sessionToken,
+    SESSION_ACTOR_ID: actorId,
+  };
+
+  const searchKey = `discovery.search:${actorId}`;
+  const readKey = `discovery.read:${actorId}`;
+  const searchHash = await hashRateLimitSubject(searchKey);
+  const readHash = await hashRateLimitSubject(readKey);
+  subjectByObjectName.set(searchHash, searchKey);
+  subjectByObjectName.set(readHash, readKey);
+
+  // Test search response
+  const searchResponse = await app.request(
+    '/discovery/products?limit=1',
+    {
+      method: 'GET',
+      headers: { authorization: `Bearer ${sessionToken}` },
+    },
+    testEnv,
+  );
+  expect(searchResponse.status === 200, 'Search should succeed');
+  const searchBody = await readJson<{ products: Array<{ productId: string }> }>(searchResponse);
+  expect(
+    Array.isArray(searchBody.products) && typeof searchBody.products[0]?.productId === 'string',
+    'Search response contract should have products array with productId',
+  );
+  expect(
+    searchResponse.headers.get('x-ratelimit-remaining') !== null,
+    'Search response should have x-ratelimit-remaining header',
+  );
+  expect(
+    searchResponse.headers.get('x-ratelimit-reset') !== null,
+    'Search response should have x-ratelimit-reset header',
+  );
+  expect(
+    searchResponse.headers.get('retry-after') === null,
+    'Successful search should not have retry-after header',
+  );
+
+  // Test read response
+  const readResponse = await app.request(
+    `/discovery/products/${published.id}`,
+    {
+      method: 'GET',
+      headers: { authorization: `Bearer ${sessionToken}` },
+    },
+    testEnv,
+  );
+  expect(readResponse.status === 200, 'Read should succeed');
+  const readBody = await readJson<{ product: { productId: string; title: string } }>(readResponse);
+  expect(
+    typeof readBody.product?.productId === 'string' && typeof readBody.product?.title === 'string',
+    'Read response contract should have product with productId and title',
+  );
+  expect(
+    readResponse.headers.get('x-ratelimit-remaining') !== null,
+    'Read response should have x-ratelimit-remaining header',
+  );
+  expect(
+    readResponse.headers.get('x-ratelimit-reset') !== null,
+    'Read response should have x-ratelimit-reset header',
+  );
+  expect(
+    readResponse.headers.get('retry-after') === null,
+    'Successful read should not have retry-after header',
+  );
+}
+
 async function main(): Promise<void> {
   await testVisibilityThroughEveryRoute();
   await testDraftEditDoesNotChangeThePublishedListing();
@@ -799,6 +1327,14 @@ async function main(): Promise<void> {
   await testProductIdValidation();
   await testBuyerPayloadsAreFieldChecked();
   await testDiscoveryIsReadOnly();
+
+  // Rate limit regression tests (production path with enforcing fake DO)
+  await testDiscoverySearchRateLimitHttp();
+  await testDiscoveryReadRateLimitHttp();
+  await testDiscoverySearchAndReadIndependentBudgets();
+  await testDiscoveryRateLimitActorIsolation();
+  await testDiscoveryRateLimitFailsClosedProduction();
+  await testDiscoveryRateLimitHeadersAndContract();
 
   console.log('DISCOVERY JOURNEY HTTP TESTS PASSED');
 }

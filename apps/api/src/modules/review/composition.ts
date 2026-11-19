@@ -1,6 +1,6 @@
 import { getCatalogService } from '../catalog/composition.js';
 import type { DatabaseBindingEnv } from '../catalog/composition.js';
-import { getAiRepository } from '../ai/composition.js';
+import { getAiRepository, selectAiProvider } from '../ai/composition.js';
 import { AppError } from '../../shared/errors/app-error.js';
 import { ReviewService } from './application/review-service.js';
 import { CatalogServiceReviewProductPort } from './infrastructure/catalog-review-port.js';
@@ -48,12 +48,13 @@ class NoSuggestionsPort implements ReviewSuggestionsPort {
  */
 export function getReviewService(
   env: ReviewBindingEnv,
+  actorId?: string,
 ): ReviewService {
   return new ReviewService(
     new CatalogServiceReviewProductPort(
-      getCatalogService(env),
+      getCatalogService(env, actorId),
     ),
-    getSuggestionsPort(env),
+    getSuggestionsPort(env, actorId),
   );
 }
 
@@ -68,25 +69,25 @@ export function getReviewService(
  */
 function getSuggestionsPort(
   env: ReviewBindingEnv,
+  actorId?: string,
 ): ReviewSuggestionsPort {
+  // Only a missing real AI provider is an optional capability.
+  // Do not turn database/configuration failures into an empty review queue.
   try {
-    return new AiRepositoryReviewSuggestionsPort(
-      getAiRepository(env),
-    );
+    selectAiProvider(env);
   } catch (error) {
     if (
-      !(error instanceof AppError) ||
-      error.code !== 'DEPENDENCY_FAILED'
+      error instanceof AppError &&
+      error.code === 'DEPENDENCY_FAILED' &&
+      error.message.startsWith('AI provider is not configured for this environment.')
     ) {
-      /**
-       * Anything else is a real fault — a missing catalog binding, a bad
-       * connection string. Swallowing it would let approval proceed on a
-       * review surface that cannot see AI at all, which is precisely the
-       * silent corruption the AI contract exists to prevent.
-       */
-      throw error;
+      return new NoSuggestionsPort();
     }
 
-    return new NoSuggestionsPort();
+    throw error;
   }
+
+  return new AiRepositoryReviewSuggestionsPort(
+    getAiRepository(env, actorId),
+  );
 }

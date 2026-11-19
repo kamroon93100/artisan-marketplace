@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "expo-sqlite": [
+        "../m1-storage/node-sqlite-test-shim.ts"
+      ]
+    }
+  },
+  "include": [
+    "*.ts"
+  ]
+}
