@@ -35,6 +35,8 @@ import { syncPendingProducts } from '@/sync/product-sync';
 import { HttpProductSyncTransport } from
   '@/network/product-sync-transport';
 import { HttpMediaSyncTransport } from '@/network/media-sync-transport';
+import { getApiBaseUrl } from '@/config/api';
+import { authorizationHeaders } from '@/network/authorization';
 import { HttpAiJobEnqueueTransport } from '@/network/ai-job-enqueue-transport';
 import { ExpoFileByteUploader } from '@/network/expo-file-byte-uploader';
 import { ExpoFileSizeProbe } from '@/network/expo-file-size-probe';
@@ -145,8 +147,8 @@ export function CreateProductScreen({
             ? { localId: draft.localId, remoteProductId: draft.remoteProductId }
             : null;
         },
-        syncMedia: (onProgress) =>
-          syncPendingMedia(
+        syncMedia: async (onProgress) => {
+          const mediaResult = await syncPendingMedia(
             ownerId,
             new HttpMediaSyncTransport(),
             new ExpoFileByteUploader(),
@@ -154,13 +156,45 @@ export function CreateProductScreen({
             onProgress,
             undefined,
             new ExpoFileSizeProbe(),
-          ),
+          );
+          const currentDraft = await getLocalProductDraft(ownerId, draftId);
+          if (currentDraft?.remoteProductId) {
+            const productTransport = new HttpProductSyncTransport();
+            await productTransport.transitionProduct(
+              currentDraft.remoteProductId,
+              'PENDING_SYNC',
+            );
+            await productTransport.transitionProduct(
+              currentDraft.remoteProductId,
+              'SYNCED',
+            );
+          }
+          return mediaResult;
+        },
         enqueueAiJob: async (productId, mediaRefs, idempotencyKey) => {
-          await new HttpAiJobEnqueueTransport().enqueue(
+          const enqueued = await new HttpAiJobEnqueueTransport().enqueue(
             productId,
             { media: mediaRefs },
             idempotencyKey,
           );
+          if (__DEV__ && enqueued.job?.id) {
+            const runResponse = await fetch(
+              `${getApiBaseUrl()}/catalog/ai-jobs/${enqueued.job.id}/run`,
+              {
+                method: 'POST',
+                headers: {
+                  ...(await authorizationHeaders()),
+                  'content-type': 'application/json',
+                },
+                body: '{}',
+              },
+            );
+            if (!runResponse.ok) {
+              throw new Error(
+                `AI job execution failed with HTTP ${runResponse.status}.`,
+              );
+            }
+          }
         },
         refresh,
         onWorkingChange: setWorking,

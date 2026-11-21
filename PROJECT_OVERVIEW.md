@@ -46,7 +46,7 @@ See docs/ for architecture, sync contract, RLS contract and the demo guide.
 Register/login, photo capture and upload to storage, AI proposals, review, approve, publish, buyer search, product detail and inquiry all worked end to end.
 
 ## Demo shortcuts / still to do
-- The AI job run and the LOCAL_DRAFT -> PENDING_SYNC -> SYNCED transitions were triggered through the API by script; the app does not do this yet.
+- Automated in mobile capture flow: after media sync, the app transitions the server product through PENDING_SYNC -> SYNCED, and in __DEV__ mode it runs the enqueued AI job automatically.
 - AI output is a deterministic fixture in development mode, not a real model.
 - Voice recording and web support are untested/unsupported.
 - Verified: inquiries are stored under the signed-in buyer (an earlier odd result was a test-script account-switch issue, not an app bug).
