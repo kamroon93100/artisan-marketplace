@@ -49,4 +49,4 @@ Register/login, photo capture and upload to storage, AI proposals, review, appro
 - The AI job run and the LOCAL_DRAFT -> PENDING_SYNC -> SYNCED transitions were triggered through the API by script; the app does not do this yet.
 - AI output is a deterministic fixture in development mode, not a real model.
 - Voice recording and web support are untested/unsupported.
-- Under investigation: an inquiry showed the same account id as the product owner.
+- Verified: inquiries are stored under the signed-in buyer (an earlier odd result was a test-script account-switch issue, not an app bug).
