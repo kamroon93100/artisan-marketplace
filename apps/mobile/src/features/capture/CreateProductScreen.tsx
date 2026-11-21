@@ -11,7 +11,8 @@ import { File, Paths } from 'expo-file-system';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Colors, Spacing } from '@/constants/theme';
+import { Colors, CraftElevation, CraftRadii, Spacing } from '@/constants/theme';
+import { CraftEntrance, CraftPressButton, CraftStatusPill } from '@/components/craft-motion';
 import {
   createLocalMediaIntent,
   listLocalMediaIntents,
@@ -308,7 +309,7 @@ export function CreateProductScreen({
   }
 
   return (
-    <ScrollView
+    <CraftEntrance delayMs={35}><ScrollView
       contentContainerStyle={[
         styles.content,
         { paddingTop: safeAreaInsets.top + Spacing.two },
@@ -321,7 +322,8 @@ export function CreateProductScreen({
 
         <View style={styles.headerCopy}>
           <Text style={styles.title}>Create Product</Text>
-          <DraftStatus
+          <CraftStatusPill text={syncing ? 'Syncing' : hasAttention ? 'Needs care' : 'Draft'} tone={hasAttention ? 'warning' : 'neutral'} />
+      <DraftStatus
             state={draft.state}
             syncing={syncing}
             hasAttention={hasAttention}
@@ -360,7 +362,7 @@ export function CreateProductScreen({
       {working ? (
         <View style={styles.saving}>
           <ActivityIndicator size="small" />
-          <Text style={styles.savingText}>Saving on this phone�</Text>
+          <Text style={styles.savingText}>Saving on this phone...</Text>
         </View>
       ) : null}
 
@@ -385,16 +387,7 @@ export function CreateProductScreen({
       ) : null}
 
 
-      <Pressable
-        onPress={() => {
-          startDraftSync('sync');
-        }}
-        disabled={working}
-        style={styles.devButton}>
-        <Text style={styles.devButtonText}>
-          Sync now
-        </Text>
-      </Pressable>
+      <CraftPressButton label="Sync now" variant="secondary" loading={working} disabled={working} onPress={() => { startDraftSync('sync'); }} style={styles.devButton} />
 
       {__DEV__ && process.env.EXPO_PUBLIC_SHOW_DEV_TOOLS === '1' && !hasAttention ? (
         <Pressable
@@ -452,14 +445,14 @@ export function CreateProductScreen({
           </Pressable>
         </View>
       ) : null}
-    </ScrollView>
+    </ScrollView></CraftEntrance>
   );
 }
 
 const styles = StyleSheet.create({
-  attention: {
+  ...(CraftElevation?.level1 ? {} : {}), attention: {
     backgroundColor: Colors.light.backgroundElement,
-    borderRadius: Spacing.three,
+    borderRadius: CraftRadii.md,
     gap: Spacing.two,
     padding: Spacing.three,
   },
@@ -542,6 +535,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 48,
     paddingHorizontal: Spacing.four,
+    ...(CraftElevation?.level1 ?? {}),
   },
   reviewButtonText: {
     color: Colors.light.text,

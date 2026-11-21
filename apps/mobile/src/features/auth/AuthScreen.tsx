@@ -19,7 +19,6 @@
 
 import React, { useCallback, useState } from 'react';
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -30,7 +29,8 @@ import {
   View,
 } from 'react-native';
 
-import { Colors, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
+import { CraftEntrance, CraftPressButton, CraftStatusPill } from '@/components/craft-motion';
 import { useTheme } from '@/hooks/use-theme';
 import { PASSWORD_MIN_LENGTH } from '../../network/auth-transport';
 import { useAuth } from './session-provider';
@@ -80,10 +80,8 @@ export function AuthScreen() {
       <ScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled">
-        <View style={styles.copy}>
-          <Text style={[styles.eyebrow, { color: theme.textSecondary }]}>
-            ARTISAN MARKETPLACE
-          </Text>
+        <CraftEntrance delayMs={40} style={styles.copy}>
+          <CraftStatusPill text="Artisan Marketplace" tone="accent" />
           <Text style={[styles.title, { color: theme.text }]}>
             {mode === 'register' ? 'Join the marketplace' : 'Welcome back'}
           </Text>
@@ -92,7 +90,7 @@ export function AuthScreen() {
               ? 'Create an account to buy from artisans. Your work stays on this phone until you are ready.'
               : 'Sign in to continue with your drafts, listings and inquiries.'}
           </Text>
-        </View>
+        </CraftEntrance>
 
         <View style={styles.form}>
           <View style={styles.field}>
@@ -163,25 +161,15 @@ export function AuthScreen() {
             </View>
           ) : null}
 
-          <Pressable
-            accessibilityRole="button"
+          <CraftPressButton
+            label={mode === 'register' ? 'Create account' : 'Sign in'}
+            variant="primary"
+            loading={busy}
             disabled={busy || username.length === 0 || password.length === 0}
             onPress={() => void submit()}
-            style={[
-              styles.primary,
-              { backgroundColor: theme.text },
-              busy || username.length === 0 || password.length === 0
-                ? styles.primaryDisabled
-                : null,
-            ]}>
-            {busy ? (
-              <ActivityIndicator color={theme.background} />
-            ) : (
-              <Text style={[styles.primaryText, { color: theme.background }]}>
-                {mode === 'register' ? 'Create account' : 'Sign in'}
-              </Text>
-            )}
-          </Pressable>
+            style={styles.primary}
+            textStyle={{ color: theme.background }}
+          />
 
           <Pressable
             accessibilityRole="button"

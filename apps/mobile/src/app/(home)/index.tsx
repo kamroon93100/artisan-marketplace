@@ -103,7 +103,7 @@ export default function HomeScreen() {
           Make a product draft.
         </Text>
         <Text style={styles.subtitle}>
-          Take one photo. Record your description. We�ll save
+          Take one photo. Record your description. We...ll save
           the work on this phone first.
         </Text>
       </View>
@@ -142,7 +142,7 @@ export default function HomeScreen() {
         onPress={() => void startCreate()}
         style={styles.primary}>
         <Text style={styles.primaryText}>
-          {creating ? 'Creating�' : 'Create Product'}
+          {creating ? 'Creating...' : 'Create Product'}
         </Text>
       </Pressable>
 
