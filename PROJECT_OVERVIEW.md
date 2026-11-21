@@ -42,3 +42,11 @@ An offline-first marketplace for artisans. An artisan captures a product (photo,
 6. Register accounts in the app to try it.
 
 See docs/ for architecture, sync contract, RLS contract and the demo guide.
+## Verified journey (Android emulator, 21 Nov 2026)
+Register/login, photo capture and upload to storage, AI proposals, review, approve, publish, buyer search, product detail and inquiry all worked end to end.
+
+## Demo shortcuts / still to do
+- The AI job run and the LOCAL_DRAFT -> PENDING_SYNC -> SYNCED transitions were triggered through the API by script; the app does not do this yet.
+- AI output is a deterministic fixture in development mode, not a real model.
+- Voice recording and web support are untested/unsupported.
+- Under investigation: an inquiry showed the same account id as the product owner.
