@@ -129,11 +129,16 @@ export function CreateProductScreen({
           listSyncOperationsForAggregate(ownerId, localId),
         retryOperation: (operationId) =>
           retrySyncOperation(ownerId, operationId),
-        syncProducts: () =>
-          syncPendingProducts(
+        syncProducts: async () => {
+          const synced = await syncPendingProducts(
             ownerId,
             new HttpProductSyncTransport(),
-          ),
+          );
+          // The product has its server id now; show the Review button without
+          // waiting for media upload and AI enqueue to finish.
+          await refresh();
+          return synced;
+        },
         getDraft: async () => {
           const draft = await getLocalProductDraft(ownerId, draftId);
           return draft
@@ -357,7 +362,7 @@ export function CreateProductScreen({
         </Text>
       </Pressable>
 
-      {__DEV__ && !hasAttention ? (
+      {__DEV__ && process.env.EXPO_PUBLIC_SHOW_DEV_TOOLS === '1' && !hasAttention ? (
         <Pressable
           onPress={async () => {
             const media =
