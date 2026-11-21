@@ -99,7 +99,7 @@ async function testEnqueuesAiJobSuccessfully(): Promise<void> {
   expect(result.deduplicated === false, 'deduplicated is false');
 
   expect(
-    capturedUrl === 'https://api.example.com/products/product-456/ai-jobs',
+    capturedUrl === 'https://api.example.com/catalog/products/product-456/ai-jobs',
     `calls correct URL (received: ${capturedUrl})`,
   );
   expect(capturedInit?.method === 'POST', 'uses POST method');

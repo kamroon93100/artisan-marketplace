@@ -31,7 +31,7 @@ export class HttpAiJobEnqueueTransport implements AiJobEnqueueTransport {
 
     try {
       response = await fetch(
-        `${getApiBaseUrl()}/products/${productId}/ai-jobs`,
+        `${getApiBaseUrl()}/catalog/products/${productId}/ai-jobs`,
         {
           method: 'POST',
           headers: {
