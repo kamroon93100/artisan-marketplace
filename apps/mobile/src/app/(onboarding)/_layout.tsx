@@ -1,3 +1,5 @@
+﻿import { useEffect } from 'react';
+import { router, usePathname } from 'expo-router';
 import { Stack } from 'expo-router/stack';
 import { useOnboarding } from '@/features/onboarding/onboarding-context';
 
@@ -18,7 +20,20 @@ import { useOnboarding } from '@/features/onboarding/onboarding-context';
  * After completion, users are directed to the Auth screen.
  */
 export default function OnboardingLayout() {
-  const { isCompleted } = useOnboarding();
+  const { isCompleted, currentStep, currentStepIndex } = useOnboarding();
+  const pathname = usePathname();
+
+  useEffect(() => {
+    if (isCompleted) {
+      router.replace('/(home)' as any);
+      return;
+    }
+
+    const target = `/(onboarding)/${currentStep}`;
+    if (pathname !== target) {
+      router.replace(target as any);
+    }
+  }, [currentStep, currentStepIndex, isCompleted, pathname]);
 
   // If onboarding is already completed, don't render the stack
   // The AuthGate in the root layout will handle routing to the main app

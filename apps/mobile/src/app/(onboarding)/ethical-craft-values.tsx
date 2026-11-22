@@ -361,7 +361,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm,
     paddingHorizontal: Spacing.md,
     borderRadius: CraftRadii.pill,
-    backgroundColor: theme => theme.secondaryContainer + '66',
+    backgroundColor: Colors.light.secondaryContainer + '66',
   },
   valuesWrapper: {
     flex: 1,
@@ -405,16 +405,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   toggleTrackActive: {
-    backgroundColor: theme => theme.primary,
+    backgroundColor: Colors.light.primary,
   },
   toggleTrackInactive: {
-    backgroundColor: theme => theme.surfaceContainerHighest,
+    backgroundColor: Colors.light.surfaceContainerHighest,
   },
   toggleThumb: {
     width: 24,
     height: 24,
     borderRadius: CraftRadii.pill,
-    backgroundColor: theme => theme.background,
+    backgroundColor: Colors.light.background,
   },
   toggleThumbActive: {
     transform: [{ translateX: 20 }],
@@ -423,7 +423,7 @@ const styles = StyleSheet.create({
     transform: [{ translateX: 0 }],
   },
   banner: {
-    backgroundColor: theme => theme.secondaryContainer + '4D',
+    backgroundColor: Colors.light.secondaryContainer + '4D',
     borderRadius: CraftRadii.xl,
     padding: Spacing.lg,
     gap: Spacing.md,
@@ -433,7 +433,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
-    color: theme => theme.primary,
+    color: Colors.light.primary,
   },
   stampRow: {
     flexDirection: 'row',
@@ -452,7 +452,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginLeft: -8,
     borderWidth: 2,
-    borderColor: theme => theme.background,
+    borderColor: Colors.light.background,
   },
   ctaWrapper: {
     width: '100%',

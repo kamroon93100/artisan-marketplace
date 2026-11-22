@@ -1,80 +1,51 @@
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useEffect, useState } from 'react';
 
 import { Colors, Spacing, CraftRadii } from '@/constants/theme';
-import { CreateProductScreen } from '@/features/capture/CreateProductScreen';
 import { useAuth } from '@/features/auth/session-provider';
 import { inquiryHistoryAction } from '@/features/inquiry/inquiry-navigation';
 import {
-  createLocalProductDraft,
   listLocalProductDrafts,
   type LocalProductDraft,
 } from '@/storage/product-drafts';
-import { MarketplaceHomeFeed } from '@/features/marketplace/home/MarketplaceHomeFeed';
+import { DiscoveryScreen } from '@/features/discovery/DiscoveryScreen';
 
 export default function HomeScreen() {
   const [draft, setDraft] = useState<LocalProductDraft | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [active, setActive] = useState(false);
-  const { state, signOut } = useAuth();
   const [signingOut, setSigningOut] = useState(false);
+  const { state, signOut } = useAuth();
   const questions = inquiryHistoryAction();
 
-  /**
-   * Local drafts are owned by the authenticated server actor. Without a
-   * session there is no owner to read or write them for, and guessing one
-   * would either expose another account's work or create an unowned row.
-   */
   const ownerId = state.session?.actorId ?? null;
 
-  async function loadLatest(owner: string): Promise<void> {
-    const drafts = await listLocalProductDrafts(owner);
-    setDraft(drafts[0] ?? null);
-  }
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      setDraft(null);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    // Clear immediately so a draft from the previous account is never
-    // shown while the new account's records are being read.
-    setDraft(null);
-    setActive(false);
-
-    if (!ownerId) {
-      return;
-    }
-
-    void listLocalProductDrafts(ownerId).then((drafts) => {
-      if (!cancelled) {
-        setDraft(drafts[0] ?? null);
+      if (!ownerId) {
+        return () => {
+          cancelled = true;
+        };
       }
-    });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [ownerId]);
+      void listLocalProductDrafts(ownerId)
+        .then((drafts) => {
+          if (!cancelled) setDraft(drafts[0] ?? null);
+        })
+        .catch(() => {
+          if (!cancelled) setDraft(null);
+        });
 
-  async function startCreate(): Promise<void> {
-    if (!ownerId) {
-      return;
-    }
-
-    setCreating(true);
-
-    try {
-      const next = await createLocalProductDraft(ownerId);
-      setDraft(next);
-      setActive(true);
-    } finally {
-      setCreating(false);
-    }
-  }
+      return () => {
+        cancelled = true;
+      };
+    }, [ownerId]),
+  );
 
   async function confirmSignOut(): Promise<void> {
     setSigningOut(true);
-
     try {
       await signOut();
     } finally {
@@ -83,44 +54,27 @@ export default function HomeScreen() {
   }
 
   const handleOpenProduct = (productId: string) => {
-    // Use expo-router's typed route with params
-    router.push({ pathname: '/product/[productId]', params: { productId: encodeURIComponent(productId) } } as any);
+    router.push({
+      pathname: '/product/[productId]',
+      params: { productId },
+    } as any);
   };
 
-  const handleOpenArtisan = (artisanId: string) => {
-    // TODO: Navigate to artisan profile
-    console.log('Open artisan:', artisanId);
-  };
+  function openNewProduct(): void {
+    router.push('/create' as any);
+  }
 
-  const handleOpenCart = () => {
-    router.push('/cart' as any);
-  };
-
-  const handleOpenSearch = () => {
-    router.push('/search' as any);
-  };
-
-  if (active && draft && ownerId) {
-    return (
-      <CreateProductScreen
-        draftId={draft.localId}
-        ownerId={ownerId}
-        onBack={() => {
-          setActive(false);
-          void loadLatest(ownerId);
-        }}
-      />
-    );
+  function continueDraft(): void {
+    if (!draft) return;
+    router.push({
+      pathname: '/create',
+      params: { draftId: draft.localId },
+    } as any);
   }
 
   return (
     <View style={styles.container}>
-      <MarketplaceHomeFeed
-        onOpenProduct={handleOpenProduct}
-        onOpenArtisan={handleOpenArtisan}
-        onOpenCart={handleOpenCart}
-        onOpenSearch={handleOpenSearch}
-      />
+      <DiscoveryScreen onOpenProduct={handleOpenProduct} />
 
       <View style={styles.account}>
         <View style={styles.accountCopy}>
@@ -135,7 +89,7 @@ export default function HomeScreen() {
           onPress={() => void confirmSignOut()}
           style={styles.signOut}>
           <Text style={styles.signOutText}>
-            {signingOut ? 'Signing out…' : 'Sign out'}
+            {signingOut ? 'Signing out...' : 'Sign out'}
           </Text>
         </Pressable>
       </View>
@@ -152,27 +106,22 @@ export default function HomeScreen() {
       </Pressable>
 
       <Pressable
-        disabled={creating}
-        onPress={() => void startCreate()}
-        style={styles.primary}>
-        <Text style={styles.primaryText}>
-          {creating ? 'Creating...' : 'Create Product'}
-        </Text>
+        accessibilityRole="button"
+        onPress={openNewProduct}
+        style={({ pressed }) => [styles.primary, pressed && styles.pressed]}>
+        <Text style={styles.primaryText}>Create Product</Text>
       </Pressable>
 
       {draft ? (
         <Pressable
-          onPress={() => setActive(true)}
-          style={styles.existing}>
+          accessibilityRole="button"
+          onPress={continueDraft}
+          style={({ pressed }) => [styles.existing, pressed && styles.pressed]}>
           <View style={styles.existingCopy}>
-            <Text style={styles.existingTitle}>
-              Continue your latest draft
-            </Text>
-            <Text style={styles.existingText}>
-              Saved on this phone
-            </Text>
+            <Text style={styles.existingTitle}>Continue your latest draft</Text>
+            <Text style={styles.existingText}>Saved on this phone</Text>
           </View>
-          <Text style={styles.arrow}>?</Text>
+          <Text style={styles.arrow}>›</Text>
         </Pressable>
       ) : null}
     </View>
@@ -214,16 +163,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: Spacing.lg,
     paddingBottom: Spacing['2xl'],
-  },
-  copy: {
-    gap: Spacing.md,
-    paddingTop: Spacing['2xl'],
-  },
-  eyebrow: {
-    color: Colors.light.textSecondary,
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 1.2,
   },
   existing: {
     alignItems: 'center',
@@ -292,16 +231,5 @@ const styles = StyleSheet.create({
     color: Colors.light.text,
     fontSize: 14,
     fontWeight: '700',
-  },
-  subtitle: {
-    color: Colors.light.textSecondary,
-    fontSize: 16,
-    lineHeight: 24,
-  },
-  title: {
-    color: Colors.light.text,
-    fontSize: 38,
-    fontWeight: '800',
-    letterSpacing: -1,
   },
 });

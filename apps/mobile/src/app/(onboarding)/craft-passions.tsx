@@ -312,18 +312,18 @@ const styles = StyleSheet.create({
     borderWidth: 2,
   },
   selectionIndicatorActive: {
-    backgroundColor: theme => theme.primary,
-    borderColor: theme => theme.primary,
+    backgroundColor: Colors.light.primary,
+    borderColor: Colors.light.primary,
   },
   selectionIndicatorInactive: {
-    borderColor: theme => theme.border,
+    borderColor: Colors.light.border,
   },
   selectedCount: {
     alignItems: 'center',
     marginTop: Spacing.lg,
     paddingTop: Spacing.md,
     borderTopWidth: 1,
-    borderTopColor: theme => theme.border,
+    borderTopColor: Colors.light.border,
   },
   ctaWrapper: {
     width: '100%',

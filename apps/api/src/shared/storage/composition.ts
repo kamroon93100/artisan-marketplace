@@ -4,6 +4,7 @@ import type { ObjectStorage } from './object-storage.js';
 
 export type ObjectStorageBindingEnv = {
   S3_ENDPOINT?: string;
+  S3_PUBLIC_ENDPOINT?: string;
   S3_REGION?: string;
   S3_ACCESS_KEY_ID?: string;
   S3_SECRET_ACCESS_KEY?: string;
@@ -54,6 +55,7 @@ export function getObjectStorage(
 
   return new S3ObjectStorage({
     endpoint: env.S3_ENDPOINT!,
+    publicEndpoint: env.S3_PUBLIC_ENDPOINT,
     region: env.S3_REGION!,
     accessKeyId: env.S3_ACCESS_KEY_ID!,
     secretAccessKey: env.S3_SECRET_ACCESS_KEY!,

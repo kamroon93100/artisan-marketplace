@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import Animated, {
+  type SharedValue,
   Easing,
   useAnimatedStyle,
   useSharedValue,
@@ -91,11 +92,10 @@ export default function TrulyUniqueCraftsScreen() {
     transform: [{ translateY: headlineTranslateY.value }],
   }));
 
-  const cardAnimStyle = (opacity: Animated.SharedValue<number>, translateY: Animated.SharedValue<number>) =>
-    useAnimatedStyle(() => ({
-      opacity: opacity.value,
-      transform: [{ translateY: translateY.value }],
-    }));
+  const card1AnimStyle = useAnimatedStyle(() => ({ opacity: card1Opacity.value, transform: [{ translateY: card1TranslateY.value }] }));
+  const card2AnimStyle = useAnimatedStyle(() => ({ opacity: card2Opacity.value, transform: [{ translateY: card2TranslateY.value }] }));
+  const card3AnimStyle = useAnimatedStyle(() => ({ opacity: card3Opacity.value, transform: [{ translateY: card3TranslateY.value }] }));
+  const card4AnimStyle = useAnimatedStyle(() => ({ opacity: card4Opacity.value, transform: [{ translateY: card4TranslateY.value }] }));
 
   const ctaAnimStyle = useAnimatedStyle(() => ({
     opacity: ctaOpacity.value,
@@ -157,7 +157,7 @@ export default function TrulyUniqueCraftsScreen() {
           </Text>
 
           {/* Handcrafted motif */}
-          <View style={styles.motif} accessibilityHidden={true}>
+          <View style={styles.motif} accessible={false}>
             <View style={[styles.motifLine, { backgroundColor: theme.border }]} />
             <Text style={{ color: theme.primary, fontSize: 16 }}>✦</Text>
             <View style={[styles.motifLine, { backgroundColor: theme.border }]} />
@@ -170,7 +170,7 @@ export default function TrulyUniqueCraftsScreen() {
           <Animated.View
             style={[
               styles.column,
-              cardAnimStyle(card1Opacity, card1TranslateY),
+              card1AnimStyle,
             ]}>
             {/* Botanical Vase Card */}
             <View style={styles.vaseCard}>
@@ -219,7 +219,7 @@ export default function TrulyUniqueCraftsScreen() {
             <Animated.View
               style={[
                 styles.card,
-                cardAnimStyle(card2Opacity, card2TranslateY),
+                card2AnimStyle,
               ]}>
               {/* Main Pastel Crochet Shoulder Bag */}
               <View style={styles.bagCard}>
@@ -248,7 +248,7 @@ export default function TrulyUniqueCraftsScreen() {
             <Animated.View
               style={[
                 styles.card,
-                cardAnimStyle(card3Opacity, card3TranslateY),
+                card3AnimStyle,
               ]}>
               {/* Dainty Floral Bracelet */}
               <View style={styles.braceletCard}>
@@ -277,7 +277,7 @@ export default function TrulyUniqueCraftsScreen() {
         <Animated.View
           style={[
             styles.valueProp,
-            cardAnimStyle(card4Opacity, card4TranslateY),
+            card4AnimStyle,
           ]}>
           <Text style={[
             Typography.bodyMd,
@@ -292,7 +292,7 @@ export default function TrulyUniqueCraftsScreen() {
         <Animated.View
           style={[
             styles.progressWrapper,
-            cardAnimStyle(card4Opacity, card4TranslateY),
+            card4AnimStyle,
           ]}>
           <View style={styles.progressDots}>
             {renderProgressDots()}
@@ -329,7 +329,7 @@ export default function TrulyUniqueCraftsScreen() {
                 Verified Artisans
               </Text>
             </View>
-            <View style={styles.trustDot} accessibilityHidden={true} />
+            <View style={styles.trustDot} accessible={false} />
             <View style={styles.trustBadge}>
               <Text style={{ fontSize: 14 }}>📦</Text>
               <Text style={[
@@ -398,7 +398,7 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: CraftRadii.lg,
     overflow: 'hidden',
-    backgroundColor: theme => theme.backgroundElement,
+    backgroundColor: Colors.light.backgroundElement,
   },
   vaseCard: {
     aspectRatio: 4 / 5,
@@ -439,13 +439,13 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     padding: Spacing.md,
     borderRadius: CraftRadii.md,
-    backgroundColor: theme => theme.surfaceContainerLow,
+    backgroundColor: Colors.light.surfaceContainerLow,
   },
   quoteIcon: {
     width: 32,
     height: 32,
     borderRadius: CraftRadii.pill,
-    backgroundColor: theme => theme.secondaryFixed,
+    backgroundColor: Colors.light.secondaryFixed,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -454,7 +454,7 @@ const styles = StyleSheet.create({
     borderRadius: CraftRadii.lg,
     overflow: 'hidden',
     position: 'relative',
-    backgroundColor: theme => theme.secondaryContainer + '4D',
+    backgroundColor: Colors.light.secondaryContainer + '4D',
   },
   bagImage: {
     width: '100%',
@@ -472,7 +472,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.sm,
     paddingVertical: Spacing.xs,
     borderRadius: CraftRadii.pill,
-    backgroundColor: theme => theme.primary,
+    backgroundColor: Colors.light.primary,
   },
   braceletCard: {
     aspectRatio: 16 / 9,
@@ -513,10 +513,10 @@ const styles = StyleSheet.create({
   },
   progressDotActive: {
     width: 24,
-    backgroundColor: theme => theme.primary,
+    backgroundColor: Colors.light.primary,
   },
   progressDotInactive: {
-    backgroundColor: theme => theme.border,
+    backgroundColor: Colors.light.border,
   },
   ctaWrapper: {
     width: '100%',
@@ -545,7 +545,7 @@ const styles = StyleSheet.create({
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: theme => theme.border,
+    backgroundColor: Colors.light.border,
   },
 });
 

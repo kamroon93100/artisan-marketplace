@@ -19,6 +19,8 @@ export interface ObjectStorage {
     expiresInSeconds?: number;
   }): Promise<PresignedUpload>;
 
+  getObject?(objectKey: string): Promise<{ bytes: Uint8Array; contentType: string | null } | null>;
+
   headObject(
     objectKey: string,
   ): Promise<StoredObjectMetadata | null>;

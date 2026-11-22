@@ -96,7 +96,7 @@ function suggestionNote(
     return 'Made before your last edit. Read the current value before accepting.';
   }
 
-  if (suggestion.riskLevel !== 'LOW') {
+  if (suggestion.riskLevel === 'MEDIUM' || suggestion.riskLevel === 'HIGH') {
     const reasons = suggestion.riskReasons.join(', ');
 
     return reasons

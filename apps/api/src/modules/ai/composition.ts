@@ -1,4 +1,5 @@
 import { getCatalogService } from '../catalog/composition.js';
+import { getMediaService } from '../media/composition.js';
 import type { DatabaseBindingEnv } from '../catalog/composition.js';
 import { AppError } from '../../shared/errors/app-error.js';
 import { AiPipelineService } from './application/ai-pipeline-service.js';
@@ -92,7 +93,49 @@ export function selectAiProvider(env: AiBindingEnv): CatalogAiProvider {
   const environment = env.APP_ENV;
 
   if (allowsInMemoryRepository(environment)) {
-    return deterministicProvider;
+    // Keep deterministic behavior for tests and ordinary local development.
+    // An explicit provider setting opts into a real model without changing
+    // the fixtures used by the automated test suite.
+    if (!env.AI_PROVIDER) {
+      return deterministicProvider;
+    }
+
+    if (env.AI_PROVIDER === 'workers-ai') {
+      if (!env.AI || typeof env.AI.run !== 'function') {
+        throw new AppError(
+          'DEPENDENCY_FAILED',
+          'Workers AI was explicitly selected, but the AI binding is unavailable.',
+        );
+      }
+
+      return new WorkersAiCatalogAiProvider({
+        AI: env.AI,
+        AI_PROVIDER_MODEL: env.AI_PROVIDER_MODEL,
+        AI_PROVIDER_VERSION: env.AI_PROVIDER_VERSION,
+      });
+    }
+
+    if (env.AI_PROVIDER === 'openai') {
+      const apiKey = env.OPENAI_API_KEY;
+
+      if (!apiKey || !apiKey.trim()) {
+        throw new AppError(
+          'DEPENDENCY_FAILED',
+          'OpenAI was explicitly selected, but OPENAI_API_KEY is not configured.',
+        );
+      }
+
+      return new OpenAiCatalogAiProvider({
+        OPENAI_API_KEY: apiKey,
+        AI_PROVIDER_MODEL: env.AI_PROVIDER_MODEL,
+        AI_PROVIDER_VERSION: env.AI_PROVIDER_VERSION,
+      });
+    }
+
+    throw new AppError(
+      'DEPENDENCY_FAILED',
+      'The configured development AI provider is not supported.',
+    );
   }
 
   if (requiresRealProvider(environment)) {
@@ -216,11 +259,27 @@ export function getAiServices(
 
   const provider = selectAiProvider(env);
 
+  // Only the configured vision-capable model resolves private image bytes.
+  // Deterministic fixtures and text-only providers retain their existing behavior.
+  const resolveAiImage =
+    provider.attribution.provider === 'workers-ai' &&
+    provider.attribution.model === '@cf/qwen/qwen3.8-27b'
+      ? async (mediaId: string, imageOwnerId: string, productId: string) => ({
+          mediaId,
+          ...await getMediaService(env, imageOwnerId).readVerifiedImage(
+            mediaId,
+            imageOwnerId,
+            productId,
+          ),
+        })
+      : undefined;
+
   const services: AiServices = {
     pipeline: new AiPipelineService(
       repository,
       provider,
       catalogPort,
+      resolveAiImage,
     ),
     review: new AiReviewService(
       repository,

@@ -8,6 +8,7 @@ import {
   View,
 } from 'react-native';
 import Animated, {
+  type SharedValue,
   Easing,
   useAnimatedStyle,
   useSharedValue,
@@ -81,11 +82,9 @@ export default function MeetTheMakersScreen() {
     transform: [{ translateY: headlineTranslateY.value }],
   }));
 
-  const cardAnimStyle = (opacity: Animated.SharedValue<number>, translateX: Animated.SharedValue<number>) =>
-    useAnimatedStyle(() => ({
-      opacity: opacity.value,
-      transform: [{ translateX: translateX.value }],
-    }));
+  const card1AnimStyle = useAnimatedStyle(() => ({ opacity: card1Opacity.value, transform: [{ translateX: card1TranslateX.value }] }));
+  const card2AnimStyle = useAnimatedStyle(() => ({ opacity: card2Opacity.value, transform: [{ translateX: card2TranslateX.value }] }));
+  const card3AnimStyle = useAnimatedStyle(() => ({ opacity: card3Opacity.value, transform: [{ translateX: card3TranslateX.value }] }));
 
   const ctaAnimStyle = useAnimatedStyle(() => ({
     opacity: ctaOpacity.value,
@@ -154,15 +153,15 @@ export default function MeetTheMakersScreen() {
         <Animated.View
           style={[
             styles.scrollWrapper,
-            cardAnimStyle(card1Opacity, card1TranslateX),
+            card1AnimStyle,
           ]}>
           <View style={styles.scrollContent}>
             {makers.map((maker, index) => {
               const animStyle = index === 0
-                ? cardAnimStyle(card1Opacity, card1TranslateX)
+                ? card1AnimStyle
                 : index === 1
-                ? cardAnimStyle(card2Opacity, card2TranslateX)
-                : cardAnimStyle(card3Opacity, card3TranslateX);
+                ? card2AnimStyle
+                : card3AnimStyle;
 
               return (
                 <Animated.View
@@ -216,7 +215,7 @@ export default function MeetTheMakersScreen() {
         <Animated.View
           style={[
             styles.scrollIndicator,
-            cardAnimStyle(card2Opacity, card2TranslateX),
+            card2AnimStyle,
           ]}>
           <View style={styles.scrollDots}>
             {makers.map((_, i) => (
@@ -235,7 +234,7 @@ export default function MeetTheMakersScreen() {
         <Animated.View
           style={[
             styles.description,
-            cardAnimStyle(card3Opacity, card3TranslateX),
+            card3AnimStyle,
           ]}>
           <Text style={[
             Typography.bodyMd,
@@ -301,7 +300,7 @@ const styles = StyleSheet.create({
     width: MAKER_CARD_WIDTH,
     borderRadius: CraftRadii.lg,
     overflow: 'hidden',
-    backgroundColor: theme => theme.backgroundElement,
+    backgroundColor: Colors.light.backgroundElement,
   },
   makerImage: {
     width: '100%',
@@ -330,10 +329,10 @@ const styles = StyleSheet.create({
   },
   scrollDotActive: {
     width: 24,
-    backgroundColor: theme => theme.primary,
+    backgroundColor: Colors.light.primary,
   },
   scrollDotInactive: {
-    backgroundColor: theme => theme.border,
+    backgroundColor: Colors.light.border,
   },
   description: {
     paddingHorizontal: Spacing.md,

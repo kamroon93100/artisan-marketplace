@@ -1,4 +1,4 @@
-﻿import {
+import {
   HttpProductSyncTransport,
 } from './product-sync-transport';
 import { ProductSyncTransportError } from './product-sync-contract';
@@ -75,6 +75,44 @@ async function testSuccess(): Promise<void> {
   }
 }
 
+async function testGetOwnedProductState(): Promise<void> {
+  let capturedUrl = '';
+  let capturedMethod = '';
+
+  mockFetch(async (input, init) => {
+    capturedUrl = String(input);
+    capturedMethod = init?.method ?? '';
+
+    return new Response(
+      JSON.stringify({
+        product: {
+          state: 'SYNCED',
+        },
+      }),
+      {
+        status: 200,
+        headers: {
+          'content-type': 'application/json',
+        },
+      },
+    );
+  });
+
+  const state = await new HttpProductSyncTransport()
+    .getOwnedProductState('product-123');
+
+  if (state !== 'SYNCED') {
+    throw new Error('Product-state read returned the wrong state.');
+  }
+
+  if (
+    capturedUrl !==
+      'http://localhost:8787/catalog/products/product-123' ||
+    capturedMethod !== 'GET'
+  ) {
+    throw new Error('Product-state read used the wrong request.');
+  }
+}
 async function testRetryableFailure(): Promise<void> {
   mockFetch(async () =>
     new Response(
@@ -122,6 +160,7 @@ async function testRetryableFailure(): Promise<void> {
 async function main(): Promise<void> {
   try {
     await testSuccess();
+    await testGetOwnedProductState();
     await testRetryableFailure();
 
     console.log('PRODUCT TRANSPORT TESTS PASSED');

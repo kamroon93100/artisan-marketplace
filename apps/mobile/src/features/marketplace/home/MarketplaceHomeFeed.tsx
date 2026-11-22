@@ -13,8 +13,6 @@ import Animated, {
   useSharedValue,
   withDelay,
   withSpring,
-  withTiming,
-  Easing,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -212,12 +210,6 @@ export function MarketplaceHomeFeed({
     editorsPicksAnim.value = withDelay(STAGGER_DELAY * 5, withSpring(1, CARD_SPRING));
   }, []);
 
-  const createEntranceStyle = (anim: ReturnType<typeof useSharedValue>, delayMs: number) =>
-    useAnimatedStyle(() => ({
-      opacity: withDelay(delayMs, withTiming(1, { duration: 300, easing: Easing.out(Easing.cubic) })),
-      transform: [{ translateY: withDelay(delayMs, withSpring(0, { damping: 20, stiffness: 260 })) }],
-    }));
-
   const headerStyle = useAnimatedStyle(() => ({
     opacity: headerAnim.value,
     transform: [{ translateY: withSpring(0, CARD_SPRING) }],
@@ -251,14 +243,9 @@ export function MarketplaceHomeFeed({
   const renderCategory = useCallback(
     ({ item, index }: { item: Category; index: number }) => {
       const isSelected = selectedCategory === item.id;
-      const delay = index * 40;
-      const animStyle = useAnimatedStyle(() => ({
-        opacity: withDelay(delay, withTiming(1, { duration: 250 })),
-        transform: [{ translateX: withDelay(delay, withSpring(0, CARD_SPRING)) }],
-      }));
 
       return (
-        <Animated.View style={[styles.categoryChip, animStyle, isSelected && styles.categoryChipSelected]}>
+        <CraftEntrance delayMs={index * 40} style={[styles.categoryChip, isSelected && styles.categoryChipSelected]}>
           <Pressable
             onPress={() => setSelectedCategory(item.id)}
             accessibilityRole="button"
@@ -276,7 +263,7 @@ export function MarketplaceHomeFeed({
               {item.label}
             </ThemedText>
           </Pressable>
-        </Animated.View>
+        </CraftEntrance>
       );
     },
     [selectedCategory, theme.background],
@@ -284,14 +271,9 @@ export function MarketplaceHomeFeed({
 
   const renderArtisan = useCallback(
     ({ item, index }: { item: Artisan; index: number }) => {
-      const delay = index * 60;
-      const animStyle = useAnimatedStyle(() => ({
-        opacity: withDelay(delay, withTiming(1, { duration: 300 })),
-        transform: [{ translateY: withDelay(delay, withSpring(0, CARD_SPRING)) }],
-      }));
 
       return (
-        <Animated.View style={[styles.artisanCard, animStyle]} key={item.id}>
+        <CraftEntrance delayMs={index * 60} style={styles.artisanCard} key={item.id}>
           <Pressable
             onPress={() => onOpenArtisan(item.id)}
             accessibilityRole="button"
@@ -327,7 +309,7 @@ export function MarketplaceHomeFeed({
               ))}
             </View>
           </Pressable>
-        </Animated.View>
+        </CraftEntrance>
       );
     },
     [onOpenArtisan],
@@ -335,11 +317,6 @@ export function MarketplaceHomeFeed({
 
   const renderProduct = useCallback(
     ({ item, index }: { item: Product; index: number }) => {
-      const delay = index * 50;
-      const animStyle = useAnimatedStyle(() => ({
-        opacity: withDelay(delay, withTiming(1, { duration: 300 })),
-        transform: [{ translateY: withDelay(delay, withSpring(0, CARD_SPRING)) }],
-      }));
 
       const hasDiscount = item.originalPrice && item.originalPrice > item.price;
       const discountPercent = hasDiscount
@@ -347,7 +324,7 @@ export function MarketplaceHomeFeed({
         : 0;
 
       return (
-        <Animated.View style={[styles.productCard, animStyle]} key={item.id}>
+        <CraftEntrance delayMs={index * 50} style={styles.productCard} key={item.id}>
           <Pressable
             onPress={() => onOpenProduct(item.id)}
             accessibilityRole="button"
@@ -403,7 +380,7 @@ export function MarketplaceHomeFeed({
               </View>
             </View>
           </Pressable>
-        </Animated.View>
+        </CraftEntrance>
       );
     },
     [onOpenProduct],
@@ -411,14 +388,9 @@ export function MarketplaceHomeFeed({
 
   const renderEditorPick = useCallback(
     ({ item, index }: { item: Product; index: number }) => {
-      const delay = index * 60;
-      const animStyle = useAnimatedStyle(() => ({
-        opacity: withDelay(delay, withTiming(1, { duration: 300 })),
-        transform: [{ translateY: withDelay(delay, withSpring(0, CARD_SPRING)) }],
-      }));
 
       return (
-        <Animated.View style={[styles.editorPickCard, animStyle]} key={item.id}>
+        <CraftEntrance delayMs={index * 60} style={styles.editorPickCard} key={item.id}>
           <Pressable
             onPress={() => onOpenProduct(item.id)}
             accessibilityRole="button"
@@ -447,7 +419,7 @@ export function MarketplaceHomeFeed({
               </ThemedText>
             </View>
           </Pressable>
-        </Animated.View>
+        </CraftEntrance>
       );
     },
     [onOpenProduct],
@@ -584,10 +556,10 @@ export function MarketplaceHomeFeed({
           />
         </Animated.View>
 
-        {/* Editor's Picks */}
+        {/* Editor&apos;s Picks */}
         <Animated.View style={[styles.section, editorsPicksStyle]}>
           <View style={styles.sectionHeader}>
-            <ThemedText type="headlineSm" themeColor="text">Editor's Picks</ThemedText>
+            <ThemedText type="headlineSm" themeColor="text">Editor&apos;s Picks</ThemedText>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="View all editor picks"
@@ -621,7 +593,7 @@ export function MarketplaceHomeFeed({
                 Every purchase plants a tree
               </ThemedText>
               <ThemedText type="bodySm" themeColor="onSecondaryContainer" style={styles.sustainabilityDesc}>
-                We've planted 47,823 trees through Eden Reforestation Projects. Your order helps restore forests.
+                We&apos;ve planted 47,823 trees through Eden Reforestation Projects. Your order helps restore forests.
               </ThemedText>
             </View>
             <CraftPressButton

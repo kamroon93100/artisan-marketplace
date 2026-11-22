@@ -130,7 +130,7 @@ export function CraftPressButton({
   );
 }
 
-export function CraftStatusPill({ text, tone = 'neutral' }: { text: string; tone?: 'neutral' | 'success' | 'warning' | 'danger' | 'accent' }) {
+export function CraftStatusPill({ text, tone = 'neutral', style }: { text: string; tone?: 'neutral' | 'success' | 'warning' | 'danger' | 'accent'; style?: StyleProp<ViewStyle> }) {
   const theme = useTheme();
   const pulse = useSharedValue(0.95);
 

@@ -17,7 +17,7 @@ import { PostgresInquiryRepository } from "../../apps/api/src/modules/inquiry/in
  *
  * This test never reads or writes the project database's tables. It connects
  * as the configured owner only long enough to create a throwaway database,
- * applies migrations 001-010 and the app-role grants there, seeds two
+ * applies migrations 001-011 and the app-role grants there, seeds two
  * artisans, and then proves the policies from a real non-owner, NOBYPASSRLS
  * login role. The throwaway database and roles are dropped in `finally`.
  *
@@ -41,6 +41,7 @@ const MIGRATIONS = [
   "infra/migrations/008_identity_accounts_and_sessions.sql",
   "infra/migrations/009_identity_refresh_grants.sql",
   "infra/migrations/010_row_level_security.sql",
+  "infra/migrations/011_ai_job_outbox.sql",
 ] as const;
 
 const RLS_TABLES = [
@@ -414,7 +415,7 @@ async function main(): Promise<void> {
     });
     await ownerTest.connect();
 
-    step("applying migrations 001-010");
+    step("applying migrations 001-011");
     await applyMigrations(ownerTest);
 
     step("applying least-privilege app grants");

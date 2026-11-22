@@ -391,18 +391,18 @@ const styles = StyleSheet.create({
   },
   miniDotActive: {
     width: 20,
-    backgroundColor: theme => theme.primaryFixed,
+    backgroundColor: Colors.light.primaryFixed,
   },
   miniDotCurrent: {
     width: 20,
-    backgroundColor: theme => theme.primary,
+    backgroundColor: Colors.light.primary,
   },
   miniDotInactive: {
-    backgroundColor: theme => theme.surfaceContainerHighest,
+    backgroundColor: Colors.light.surfaceContainerHighest,
   },
   narrativeCard: {
     borderRadius: CraftRadii.lg,
-    backgroundColor: theme => theme.surfaceContainerLow,
+    backgroundColor: Colors.light.surfaceContainerLow,
     padding: Spacing.md,
     overflow: 'hidden',
     marginBottom: Spacing.lg,
@@ -414,7 +414,7 @@ const styles = StyleSheet.create({
     width: 96,
     height: 96,
     borderRadius: 48,
-    backgroundColor: theme => theme.secondaryContainer + '66',
+    backgroundColor: Colors.light.secondaryContainer + '66',
   },
   narrativeContent: {
     position: 'relative',
@@ -427,12 +427,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.xs,
     borderRadius: CraftRadii.pill,
-    backgroundColor: theme => theme.secondaryContainer + '99',
+    backgroundColor: Colors.light.secondaryContainer + '99',
     alignSelf: 'flex-start',
     marginBottom: Spacing.sm,
   },
   mockupCard: {
-    backgroundColor: theme => theme.background,
+    backgroundColor: Colors.light.background,
     borderRadius: CraftRadii.md,
     padding: Spacing.md,
     marginTop: Spacing.lg,
@@ -447,7 +447,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: CraftRadii.md,
-    backgroundColor: theme => theme.secondaryContainer,
+    backgroundColor: Colors.light.secondaryContainer,
   },
   thumbnailImage: {
     width: '100%',
@@ -461,7 +461,7 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: theme => theme.primary,
+    backgroundColor: Colors.light.primary,
   },
   mockupDetails: {
     flex: 1,
@@ -488,7 +488,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
-    color: theme => theme.textSecondary,
+    color: Colors.light.textSecondary,
   },
   reservedPill: {
     // Custom styling for reserved pill
@@ -525,16 +525,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   prefCheckboxTrackActive: {
-    backgroundColor: theme => theme.primary,
+    backgroundColor: Colors.light.primary,
   },
   prefCheckboxTrackInactive: {
-    backgroundColor: theme => theme.surfaceContainerHigh,
+    backgroundColor: Colors.light.surfaceContainerHigh,
   },
   prefCheckboxThumb: {
     width: 16,
     height: 16,
     borderRadius: 8,
-    backgroundColor: theme => theme.background,
+    backgroundColor: Colors.light.background,
   },
   prefCheckboxThumbActive: {
     opacity: 1,
@@ -555,7 +555,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.sm,
     paddingVertical: Spacing.xs,
     borderRadius: CraftRadii.pill,
-    backgroundColor: theme => theme.surfaceContainerHigh,
+    backgroundColor: Colors.light.surfaceContainerHigh,
   },
   ctaWrapper: {
     width: '100%',

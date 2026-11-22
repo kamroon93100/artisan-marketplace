@@ -1,3 +1,16 @@
+import type { ProductState } from '@artisan-marketplace/contracts';
+
+const PRODUCT_STATES: readonly ProductState[] = [
+  'LOCAL_DRAFT',
+  'PENDING_SYNC',
+  'SYNCED',
+  'REVIEW_REQUIRED',
+  'APPROVED',
+  'PUBLISHED',
+  'ARCHIVED',
+  'CONFLICT',
+  'ACTION_REQUIRED',
+];
 import { getApiBaseUrl } from '../config/api';
 import { authorizationHeaders } from './authorization';
 import {
@@ -98,6 +111,83 @@ export class HttpProductSyncTransport
     );
   }
 
+  async getOwnedProductState(
+    productId: string,
+  ): Promise<ProductState> {
+    let response: Response;
+
+    try {
+      response = await fetch(
+        `${getApiBaseUrl()}/catalog/products/${encodeURIComponent(productId)}`,
+        {
+          method: 'GET',
+          headers: {
+            ...(await authorizationHeaders()),
+          },
+        },
+      );
+    } catch (error) {
+      throw new ProductSyncTransportError(
+        error instanceof Error
+          ? error.message
+          : 'Network request failed.',
+        'NETWORK_ERROR',
+        true,
+      );
+    }
+
+    let body: unknown = null;
+
+    try {
+      body = await response.json();
+    } catch {
+      // The HTTP status remains authoritative.
+    }
+
+    const payload = (body ?? {}) as {
+      product?: {
+        state?: unknown;
+      };
+      error?: {
+        code?: string;
+        message?: string;
+      };
+    };
+
+    if (!response.ok) {
+      const code = payload.error?.code ?? `HTTP_${response.status}`;
+      const message =
+        payload.error?.message ??
+        `Product state lookup failed with HTTP ${response.status}.`;
+
+      const retryable =
+        response.status === 408 ||
+        response.status === 425 ||
+        response.status === 429 ||
+        response.status >= 500;
+
+      throw new ProductSyncTransportError(
+        message,
+        code,
+        retryable,
+      );
+    }
+
+    const state = payload.product?.state;
+
+    if (
+      typeof state !== 'string' ||
+      !PRODUCT_STATES.includes(state as ProductState)
+    ) {
+      throw new ProductSyncTransportError(
+        'The API returned an invalid product state.',
+        'INVALID_SERVER_RESPONSE',
+        false,
+      );
+    }
+
+    return state as ProductState;
+  }
   async transitionProduct(
     productId: string,
     state: SyncableProductState,

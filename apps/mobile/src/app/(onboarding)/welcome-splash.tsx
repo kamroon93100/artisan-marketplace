@@ -118,11 +118,11 @@ export default function WelcomeSplashScreen() {
           </Text>
 
           {/* Handcrafted motif divider */}
-          <View style={styles.divider} accessibilityHidden={true}>
+          <View style={styles.divider} accessible={false}>
             <View style={[styles.dividerLine, { backgroundColor: theme.border }]} />
             <Text style={[
               { color: theme.primary, fontSize: 18 },
-              { fontFamily: Fonts.web?.serif || Fonts.ios?.serif || 'Playfair Display' },
+              { fontFamily: Fonts.serif },
             ]}>
               ✦
             </Text>
@@ -162,7 +162,7 @@ export default function WelcomeSplashScreen() {
                 Verified Artisans
               </Text>
             </View>
-            <View style={styles.badgeDot} accessibilityHidden={true} />
+            <View style={styles.badgeDot} accessible={false} />
             <View style={styles.badge}>
               <Text style={[
                 Typography.labelSm,
@@ -171,7 +171,7 @@ export default function WelcomeSplashScreen() {
                 Plastic-Free Wrap
               </Text>
             </View>
-            <View style={styles.badgeDot} accessibilityHidden={true} />
+            <View style={styles.badgeDot} accessible={false} />
             <View style={styles.badge}>
               <Text style={[
                 Typography.labelSm,

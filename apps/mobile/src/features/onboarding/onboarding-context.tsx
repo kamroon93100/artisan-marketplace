@@ -7,6 +7,7 @@ import React, {
   useMemo,
   ReactNode,
 } from 'react';
+import { router } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 
 const ONBOARDING_COMPLETE_KEY = 'onboarding.complete.v1';
@@ -88,11 +89,6 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   const [progress, setProgress] = useState<OnboardingProgress>(DEFAULT_PROGRESS);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Load progress from secure storage on mount
-  useEffect(() => {
-    loadProgress();
-  }, []);
-
   const loadProgress = useCallback(async () => {
     try {
       const [completeRaw, progressRaw] = await Promise.all([
@@ -112,6 +108,11 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     }
   }, []);
+
+  // Load persisted onboarding state after the callback is initialized.
+  useEffect(() => {
+    void loadProgress();
+  }, [loadProgress]);
 
   const saveProgress = useCallback(async (newProgress: OnboardingProgress) => {
     try {
@@ -133,33 +134,32 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const nextStep = useCallback(() => {
-    setProgress((prev) => {
-      const currentIndex = prev.currentStepIndex;
-      if (currentIndex >= ONBOARDING_STEPS.length - 1) {
-        // Onboarding complete
-        const completed = {
-          ...prev,
-          completedSteps: ONBOARDING_STEPS,
-          currentStepIndex: ONBOARDING_STEPS.length - 1,
-        };
-        saveProgress(completed);
-        saveComplete();
-        return completed;
-      }
+    const currentIndex = progress.currentStepIndex;
+    const nextIndex = Math.min(
+      currentIndex + 1,
+      ONBOARDING_STEPS.length - 1,
+    );
 
-      const newIndex = currentIndex + 1;
-      const newCompletedSteps = [
-        ...new Set([...prev.completedSteps, ONBOARDING_STEPS[currentIndex]]),
-      ];
-      const newProgress = {
-        ...prev,
-        currentStepIndex: newIndex,
-        completedSteps: newCompletedSteps,
-      };
-      saveProgress(newProgress);
-      return newProgress;
-    });
-  }, [saveProgress, saveComplete]);
+    const newCompletedSteps = [
+      ...new Set([
+        ...progress.completedSteps,
+        ONBOARDING_STEPS[currentIndex],
+      ]),
+    ];
+
+    const newProgress = {
+      ...progress,
+      currentStepIndex: nextIndex,
+      completedSteps: newCompletedSteps,
+    };
+
+    setProgress(newProgress);
+    void saveProgress(newProgress);
+
+    if (nextIndex > currentIndex) {
+      router.push(`/(onboarding)/${ONBOARDING_STEPS[nextIndex]}` as any);
+    }
+  }, [progress, saveProgress]);
 
   const previousStep = useCallback(() => {
     setProgress((prev) => {
@@ -264,11 +264,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   );
 
   if (isLoading) {
-    return (
-      <OnboardingContext.Provider value={null as unknown as OnboardingContextValue}>
-        {children}
-      </OnboardingContext.Provider>
-    );
+    return null;
   }
 
   return <OnboardingContext.Provider value={value}>{children}</OnboardingContext.Provider>;

@@ -24,6 +24,12 @@ export type CatalogAiAttribution = {
  * resolves the reference itself, inside its own provider and privacy policy,
  * so the job record never becomes a second copy of the media.
  */
+export type CatalogAiImage = {
+  mediaId: string;
+  bytes: Uint8Array;
+  contentType: string;
+};
+
 export type CatalogAiRequest = {
   requestId: string;
   correlationId: string;
@@ -35,6 +41,7 @@ export type CatalogAiRequest = {
   pipelineVersion: string;
   input: AiJobInput;
   media: readonly AiJobMediaReference[];
+  images?: readonly CatalogAiImage[];
 };
 
 /**

@@ -1,4 +1,4 @@
-﻿create table if not exists media_attachments (
+create table if not exists media_attachments (
   id uuid primary key,
   product_id uuid not null
     references catalog_products(id)

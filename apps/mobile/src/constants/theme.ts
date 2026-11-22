@@ -66,6 +66,7 @@ export const Colors = {
     surfaceDim: '#DDDAD4',
     surfaceBright: '#FDF9F3',
     surfaceContainerLow: '#F7F3ED',
+    surfaceContainerLowest: '#FDF9F3',
     surfaceContainer: '#F1EDE7',
     surfaceContainerHigh: '#EBE8E2',
     surfaceContainerHighest: '#E6E2DC',
@@ -224,6 +225,7 @@ export const FontWeights = {
 
 // Font sizes matching Stitch design tokens
 export const FontSizes = {
+  displayLg: 40, displayMd: 32, displaySm: 24, titleLg: 32, titleMd: 22, titleSm: 18,
   // Headlines (Playfair Display, weight 600)
   headlineXl: 40,        // headline-xl: 40px, lineHeight 48px, letterSpacing -0.02em
   headlineXlMobile: 30,  // headline-xl-mobile: 30px, lineHeight 38px, letterSpacing -0.01em
@@ -245,6 +247,7 @@ export const FontSizes = {
 
 // Line heights matching Stitch design tokens
 export const LineHeights = {
+  displayLg: 48, displayMd: 40, displaySm: 32, titleLg: 40, titleMd: 28, titleSm: 24,
   headlineXl: 48,
   headlineXlMobile: 38,
   headlineLg: 40,
@@ -261,6 +264,7 @@ export const LineHeights = {
 
 // Letter spacing matching Stitch design tokens
 export const LetterSpacings = {
+  displayLg: -0.02, displayMd: -0.01, displaySm: 0, titleLg: -0.01, titleMd: 0, titleSm: 0, bodyLg: 0, bodyMd: 0, bodySm: 0,
   headlineXl: -0.02,
   headlineXlMobile: -0.01,
   headlineLg: -0.01,
@@ -275,6 +279,7 @@ export const LetterSpacings = {
 // gutter: 16px, margin: 20px, space-xs: 4px, space-sm: 8px, space-md: 16px, space-lg: 24px, space-xl: 32px, space-2xl: 48px
 export const Spacing = {
   none: 0,
+  half: 2,
   xs: 4,      // space-xs: 0.25rem = 4px
   sm: 8,      // space-sm: 0.5rem = 8px
   md: 16,     // space-md: 1rem = 16px (gutter)
@@ -307,42 +312,42 @@ export const MaxContentWidth = 800;
 export const Typography = {
   // Headlines (Playfair Display, semibold)
   headlineXl: {
-    fontFamily: Fonts.web?.serif || Fonts.ios?.serif || 'Playfair Display',
+    fontFamily: Fonts.serif,
     fontSize: FontSizes.headlineXl,
     lineHeight: LineHeights.headlineXl,
     letterSpacing: LetterSpacings.headlineXl,
     fontWeight: FontWeights.semibold,
   },
   headlineXlMobile: {
-    fontFamily: Fonts.web?.serif || Fonts.ios?.serif || 'Playfair Display',
+    fontFamily: Fonts.serif,
     fontSize: FontSizes.headlineXlMobile,
     lineHeight: LineHeights.headlineXlMobile,
     letterSpacing: LetterSpacings.headlineXlMobile,
     fontWeight: FontWeights.semibold,
   },
   headlineLg: {
-    fontFamily: Fonts.web?.serif || Fonts.ios?.serif || 'Playfair Display',
+    fontFamily: Fonts.serif,
     fontSize: FontSizes.headlineLg,
     lineHeight: LineHeights.headlineLg,
     letterSpacing: LetterSpacings.headlineLg,
     fontWeight: FontWeights.semibold,
   },
   headlineLgMobile: {
-    fontFamily: Fonts.web?.serif || Fonts.ios?.serif || 'Playfair Display',
+    fontFamily: Fonts.serif,
     fontSize: FontSizes.headlineLgMobile,
     lineHeight: LineHeights.headlineLgMobile,
     letterSpacing: LetterSpacings.headlineLg,
     fontWeight: FontWeights.semibold,
   },
   headlineMd: {
-    fontFamily: Fonts.web?.serif || Fonts.ios?.serif || 'Playfair Display',
+    fontFamily: Fonts.serif,
     fontSize: FontSizes.headlineMd,
     lineHeight: LineHeights.headlineMd,
     letterSpacing: LetterSpacings.headlineMd,
     fontWeight: FontWeights.semibold,
   },
   headlineSm: {
-    fontFamily: Fonts.web?.serif || Fonts.ios?.serif || 'Playfair Display',
+    fontFamily: Fonts.serif,
     fontSize: FontSizes.headlineSm,
     lineHeight: LineHeights.headlineSm,
     letterSpacing: LetterSpacings.headlineSm,
@@ -351,19 +356,19 @@ export const Typography = {
 
   // Body (Plus Jakarta Sans, regular)
   bodyLg: {
-    fontFamily: Fonts.web?.sans || Fonts.ios?.sans || 'Plus Jakarta Sans',
+    fontFamily: Fonts.sans,
     fontSize: FontSizes.bodyLg,
     lineHeight: LineHeights.bodyLg,
     fontWeight: FontWeights.regular,
   },
   bodyMd: {
-    fontFamily: Fonts.web?.sans || Fonts.ios?.sans || 'Plus Jakarta Sans',
+    fontFamily: Fonts.sans,
     fontSize: FontSizes.bodyMd,
     lineHeight: LineHeights.bodyMd,
     fontWeight: FontWeights.regular,
   },
   bodySm: {
-    fontFamily: Fonts.web?.sans || Fonts.ios?.sans || 'Plus Jakarta Sans',
+    fontFamily: Fonts.sans,
     fontSize: FontSizes.bodySm,
     lineHeight: LineHeights.bodySm,
     fontWeight: FontWeights.regular,
@@ -371,21 +376,21 @@ export const Typography = {
 
   // Labels (Plus Jakarta Sans, medium/semibold)
   labelLg: {
-    fontFamily: Fonts.web?.sans || Fonts.ios?.sans || 'Plus Jakarta Sans',
+    fontFamily: Fonts.sans,
     fontSize: FontSizes.labelLg,
     lineHeight: LineHeights.labelLg,
     letterSpacing: LetterSpacings.labelLg,
     fontWeight: FontWeights.semibold,
   },
   labelMd: {
-    fontFamily: Fonts.web?.sans || Fonts.ios?.sans || 'Plus Jakarta Sans',
+    fontFamily: Fonts.sans,
     fontSize: FontSizes.labelMd,
     lineHeight: LineHeights.labelMd,
     letterSpacing: LetterSpacings.labelMd,
     fontWeight: FontWeights.semibold,
   },
   labelSm: {
-    fontFamily: Fonts.web?.sans || Fonts.ios?.sans || 'Plus Jakarta Sans',
+    fontFamily: Fonts.sans,
     fontSize: FontSizes.labelSm,
     lineHeight: LineHeights.labelSm,
     letterSpacing: LetterSpacings.labelSm,

@@ -1,5 +1,6 @@
 import {
   ActivityIndicator,
+  BackHandler,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -33,6 +34,7 @@ import { createDraftSyncRunner } from './draft-sync';
 import { ReviewProductScreen } from '../review/ReviewProductScreen';
 import { syncPendingMedia } from '@/sync/media-sync';
 import { syncPendingProducts } from '@/sync/product-sync';
+import { ensureProductSynced } from '@/sync/product-state-sync';
 import { HttpProductSyncTransport } from
   '@/network/product-sync-transport';
 import { HttpMediaSyncTransport } from '@/network/media-sync-transport';
@@ -68,6 +70,7 @@ export function CreateProductScreen({
   const [voiceUri, setVoiceUri] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [hasAttention, setHasAttention] = useState(false);
+  const [syncFailure, setSyncFailure] = useState<{ code: string | null; message: string | null } | null>(null);
   const [working, setWorking] = useState(false);
   const [uploadProgress, setUploadProgress] =
     useState<UploadProgressMap>({});
@@ -117,11 +120,41 @@ export function CreateProductScreen({
         (item) => item.state === 'ACTION_REQUIRED',
       ),
     );
+
+    const failure = [...operations].reverse().find(
+      (item) => item.lastErrorCode || item.lastErrorMessage,
+    );
+
+    setSyncFailure(
+      failure
+        ? {
+            code: failure.lastErrorCode,
+            message: failure.lastErrorMessage,
+          }
+        : null,
+    );
   }, [draftId, ownerId]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener(
+      'hardwareBackPress',
+      () => {
+        if (reviewingRemoteId) {
+          setReviewingRemoteId(null);
+          void refresh();
+        } else {
+          onBack();
+        }
+
+        return true;
+      },
+    );
+
+    return () => subscription.remove();
+  }, [onBack, refresh, reviewingRemoteId]);
 
   const runDraftSync = useMemo(
     () =>
@@ -161,13 +194,9 @@ export function CreateProductScreen({
           const currentDraft = await getLocalProductDraft(ownerId, draftId);
           if (currentDraft?.remoteProductId) {
             const productTransport = new HttpProductSyncTransport();
-            await productTransport.transitionProduct(
+            await ensureProductSynced(
               currentDraft.remoteProductId,
-              'PENDING_SYNC',
-            );
-            await productTransport.transitionProduct(
-              currentDraft.remoteProductId,
-              'SYNCED',
+              productTransport,
             );
           }
           return mediaResult;
@@ -230,7 +259,7 @@ export function CreateProductScreen({
       );
 
       const source = new File(asset.uri);
-      source.copy(destination);
+      await source.copy(destination);
 
       await createLocalMediaIntent(ownerId, {
         localId,
@@ -435,6 +464,20 @@ export function CreateProductScreen({
           <Text style={styles.attentionText}>
             A sync operation needs another attempt.
           </Text>
+          {syncFailure ? (
+            <View>
+              {syncFailure.code ? (
+                <Text style={styles.attentionText}>
+                  Error code: {syncFailure.code}
+                </Text>
+              ) : null}
+              {syncFailure.message ? (
+                <Text style={styles.attentionText}>
+                  {syncFailure.message}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
           <Pressable
             onPress={() => {
               startDraftSync('retry');

@@ -307,12 +307,12 @@ export function ProductDetailScreen({
   );
 
   const renderTab = useCallback(
-    (tab: { id: 'story' | 'specs' | 'shipping'; label: string }) => {
+    (tab: { id: string; label: string }) => {
       const isActive = activeTab === tab.id;
       return (
         <Pressable
           key={tab.id}
-          onPress={() => setActiveTab(tab.id)}
+          onPress={() => setActiveTab(tab.id as 'story' | 'specs' | 'shipping')}
           accessibilityRole="tab"
           accessibilityState={{ selected: isActive }}
           style={({ pressed }) => [
@@ -688,7 +688,7 @@ export function ProductDetailScreen({
               <ThemedText type="bodySm" themeColor="text" style={styles.impactAmount}>
                 $37.40
               </ThemedText>{' '}
-              of this purchase is routed directly to Mei & Hiro Lin's independent workshop to fund non-toxic kiln fuels and studio apprenticeships.
+              of this purchase is routed directly to Mei &amp; Hiro Lin&apos;s independent workshop to fund non-toxic kiln fuels and studio apprenticeships.
             </ThemedText>
             <ThemedView type="surfaceContainerHighest" style={styles.impactMeter}>
               <ThemedView type="primary" style={[styles.impactMeterFill, { width: '88%' }]} />
@@ -729,7 +729,7 @@ export function ProductDetailScreen({
               </View>
             </View>
             <ThemedText type="bodySm" themeColor="textSecondary" style={styles.artisanQuote}>
-              "Each vase is shaped individually on the wheel — no two petal rims are identical. It carries the pulse of morning calm into your home."
+              &quot;Each vase is shaped individually on the wheel — no two petal rims are identical. It carries the pulse of morning calm into your home.&quot;
             </ThemedText>
             <CraftPressButton
               label="Ask the Makers a Question"
@@ -816,7 +816,7 @@ export function ProductDetailScreen({
                   </ThemedText>
                 </View>
                 <ThemedText type="bodyMd" themeColor="textSecondary" style={styles.reviewHighlightText}>
-                  "The natural clay texture is breathtaking in morning sunlight. It feels like holding a piece of art rather than a commercial product. The wild daisies stand effortlessly in the fluted folds."
+                  &quot;The natural clay texture is breathtaking in morning sunlight. It feels like holding a piece of art rather than a commercial product. The wild daisies stand effortlessly in the fluted folds.&quot;
                 </ThemedText>
               </ThemedView>
             )}

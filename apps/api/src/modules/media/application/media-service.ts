@@ -158,6 +158,56 @@ export class MediaService {
     private readonly objectStorage: ObjectStorage,
   ) {}
 
+  async readVerifiedImage(
+    mediaId: string,
+    actorId: string,
+    expectedProductId: string,
+  ): Promise<{ bytes: Uint8Array; contentType: string }> {
+    const attachment = await this.requireOwnedAttachment(mediaId, actorId);
+
+    if (attachment.productId !== expectedProductId) {
+      throw new AppError('FORBIDDEN', 'Media does not belong to this product.', { mediaId });
+    }
+    if (attachment.kind !== 'IMAGE' || attachment.state !== 'VERIFIED') {
+      throw new AppError('CONFLICT', 'AI can only inspect verified product images.', {
+        mediaId, kind: attachment.kind, state: attachment.state,
+      });
+    }
+    if (!attachment.objectKey || !attachment.contentType || !attachment.sizeBytes) {
+      throw new AppError('CONFLICT', 'Verified image is missing storage metadata.', { mediaId });
+    }
+    const maxBytes = 4 * 1024 * 1024;
+    if (attachment.sizeBytes > maxBytes) {
+      throw new AppError('VALIDATION_FAILED', 'Product image exceeds the 4 MB AI image limit.', { mediaId });
+    }
+
+    const getObject = this.objectStorage.getObject;
+    if (!getObject) {
+      throw new AppError('DEPENDENCY_FAILED', 'Private object download is not configured.');
+    }
+
+    const stored = await getObject.call(this.objectStorage, attachment.objectKey);
+    if (!stored) {
+      throw new AppError('NOT_FOUND', 'Verified product image was not found in object storage.', { mediaId });
+    }
+    if (stored.bytes.byteLength !== attachment.sizeBytes) {
+      throw new AppError('CONFLICT', 'Stored image size does not match verified media metadata.', { mediaId });
+    }
+
+    const contentType = (stored.contentType ?? attachment.contentType)
+      .split(';')[0].trim().toLowerCase();
+    if (!['image/jpeg', 'image/jpg', 'image/png', 'image/webp'].includes(contentType)) {
+      throw new AppError('VALIDATION_FAILED', 'Unsupported image content type for AI vision.', {
+        mediaId, contentType,
+      });
+    }
+
+    return {
+      bytes: stored.bytes,
+      contentType: contentType === 'image/jpg' ? 'image/jpeg' : contentType,
+    };
+  }
+
   async requestAttachment(
     input: Omit<CreateMediaAttachmentInput, 'ownerId'> & {
       actorId: string;

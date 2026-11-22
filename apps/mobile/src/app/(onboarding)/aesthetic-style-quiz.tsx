@@ -291,7 +291,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: CraftRadii.pill,
-    backgroundColor: theme => theme.primary,
+    backgroundColor: Colors.light.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },

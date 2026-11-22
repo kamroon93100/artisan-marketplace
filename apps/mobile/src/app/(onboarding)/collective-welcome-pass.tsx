@@ -1,7 +1,8 @@
-import React from 'react';
+﻿import React from 'react';
 import {
   Image,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -118,23 +119,23 @@ export default function CollectiveWelcomePassScreen() {
   const style = progress.selectedStyle ?? 'wabi-sabi';
 
   const badges = [
-    { icon: '🎨', label: `${interests} Interests Selected` },
-    { icon: '🌿', label: style === 'wabi-sabi' ? 'Wabi-Sabi Style' : 'Bohemian Style' },
-    { icon: '♻', label: 'Plastic-Free Packaging' },
+    { icon: 'ðŸŽ¨', label: `${interests} Interests Selected` },
+    { icon: 'ðŸŒ¿', label: style === 'wabi-sabi' ? 'Wabi-Sabi Style' : 'Bohemian Style' },
+    { icon: 'â™»', label: 'Plastic-Free Packaging' },
   ];
 
   const perks = [
-    { icon: '🏪', label: 'Direct Maker', description: 'Zero middlemen markup' },
-    { icon: '🌍', label: 'Carbon Neutral', description: 'Earth-first transit' },
+    { icon: 'ðŸª', label: 'Direct Maker', description: 'Zero middlemen markup' },
+    { icon: 'ðŸŒ', label: 'Carbon Neutral', description: 'Earth-first transit' },
   ];
 
   return (
     <View style={[styles.screen, { backgroundColor: theme.background }]}>
-      <View style={styles.contentWrapper}>
+      <ScrollView style={styles.screen} contentContainerStyle={styles.contentWrapper}>
         {/* Subtle Ambient Header */}
         <Animated.View style={[styles.header, headerAnimStyle]}>
           <View style={styles.headerBadge}>
-            <Text style={{ fontSize: 14 }}>⭐</Text>
+            <Text style={{ fontSize: 14 }}>â­</Text>
             <Text style={[
               Typography.labelSm,
               { color: theme.onSecondaryContainer },
@@ -204,7 +205,7 @@ export default function CollectiveWelcomePassScreen() {
             <View style={styles.passCenter}>
               <View style={styles.giftRow}>
                 <View style={styles.giftIcon}>
-                  <Text style={{ fontSize: 20 }}>🎁</Text>
+                  <Text style={{ fontSize: 20 }}>ðŸŽ</Text>
                 </View>
                 <View>
                   <Text style={[
@@ -224,7 +225,7 @@ export default function CollectiveWelcomePassScreen() {
               <Text style={[
                 { color: theme.primaryFixed, fontSize: 20 },
               ]}>
-                ✓
+                âœ“
               </Text>
             </View>
 
@@ -253,7 +254,7 @@ export default function CollectiveWelcomePassScreen() {
                 </Text>
                 <Text style={[
                   Typography.labelMd,
-                  { color: theme.primaryFixed, fontFamily: Fonts.web?.mono || Fonts.ios?.mono || 'monospace', letterSpacing: 2, marginTop: 2 },
+                  { color: theme.primaryFixed, fontFamily: Fonts.mono, letterSpacing: 2, marginTop: 2 },
                 ]}>
                   #8921-ART
                 </Text>
@@ -266,7 +267,7 @@ export default function CollectiveWelcomePassScreen() {
         <Animated.View style={[styles.snapshotCard, snapshotAnimStyle]}>
           <View style={styles.snapshotHeader}>
             <View style={styles.snapshotTitle}>
-              <Text style={{ fontSize: 18, color: theme.primary }}>✦</Text>
+              <Text style={{ fontSize: 18, color: theme.primary }}>âœ¦</Text>
               <Text style={[
                 Typography.labelMd,
                 { color: theme.text, fontWeight: '600' },
@@ -322,12 +323,12 @@ export default function CollectiveWelcomePassScreen() {
 
         {/* Artisan Guarantee Strip */}
         <Animated.View style={[styles.guaranteeStrip, perksAnimStyle]}>
-          <Text style={{ fontSize: 16, color: theme.primary }}>✓</Text>
+          <Text style={{ fontSize: 16, color: theme.primary }}>âœ“</Text>
           <Text style={[
             Typography.bodySm,
             { color: theme.textSecondary, fontWeight: '500' },
           ]}>
-            Guaranteed Safe Delivery • Direct Maker Support • Plastic-Free
+            Guaranteed Safe Delivery â€¢ Direct Maker Support â€¢ Plastic-Free
           </Text>
         </Animated.View>
 
@@ -352,7 +353,7 @@ export default function CollectiveWelcomePassScreen() {
               Typography.labelMd,
               { color: theme.primary, fontWeight: '600' },
             ]}>
-              Copy Code: <u>WELCOME15</u>
+              Copy Code: <Text style={{ textDecorationLine: 'underline' }}>WELCOME15</Text>
             </Text>
           </Pressable>
 
@@ -361,11 +362,11 @@ export default function CollectiveWelcomePassScreen() {
               Typography.labelMd,
               { color: theme.secondary, marginTop: Spacing.sm, textAlign: 'center' },
             ]}>
-              ✓ Coupon copied to clipboard!
+              âœ“ Coupon copied to clipboard!
             </Text>
           )}
         </Animated.View>
-      </View>
+      </ScrollView>
     </View>
   );
 }
@@ -375,7 +376,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentWrapper: {
-    flex: 1,
+    flexGrow: 1,
     paddingHorizontal: Spacing.margin,
     paddingTop: Spacing.md,
     paddingBottom: Spacing['2xl'],
@@ -391,7 +392,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.xs,
     borderRadius: CraftRadii.pill,
-    backgroundColor: theme => theme.secondaryContainer + '99',
+    backgroundColor: Colors.light.secondaryContainer + '99',
     marginBottom: Spacing.sm,
   },
   passCard: {
@@ -399,7 +400,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     padding: Spacing.xl,
     marginBottom: Spacing.lg,
-    backgroundColor: theme => theme.primary,
+    backgroundColor: Colors.light.primary,
     position: 'relative',
   },
   passGlow1: {
@@ -409,7 +410,7 @@ const styles = StyleSheet.create({
     width: 96,
     height: 96,
     borderRadius: 48,
-    backgroundColor: theme => theme.secondaryFixed + '33',
+    backgroundColor: Colors.light.secondaryFixed + '33',
   },
   passGlow2: {
     position: 'absolute',
@@ -418,7 +419,7 @@ const styles = StyleSheet.create({
     width: 88,
     height: 88,
     borderRadius: 44,
-    backgroundColor: theme => theme.tertiaryFixed + '20',
+    backgroundColor: Colors.light.tertiaryFixed + '20',
   },
   passContent: {
     position: 'relative',
@@ -441,7 +442,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: CraftRadii.pill,
-    backgroundColor: theme => theme.surfaceContainerLowest + 'E6',
+    backgroundColor: Colors.light.surfaceContainerLow + 'E6',
     padding: 6,
     alignItems: 'center',
     justifyContent: 'center',
@@ -454,10 +455,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.xs,
     borderRadius: CraftRadii.pill,
-    backgroundColor: theme => theme.surfaceContainerLowest + '33',
+    backgroundColor: Colors.light.surfaceContainerLow + '33',
   },
   passCenter: {
-    backgroundColor: theme => theme.surfaceContainerLowest + '26',
+    backgroundColor: Colors.light.surfaceContainerLow + '26',
     borderRadius: CraftRadii.md,
     padding: Spacing.md,
     flexDirection: 'row',
@@ -473,7 +474,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: CraftRadii.pill,
-    backgroundColor: theme => theme.primaryFixed,
+    backgroundColor: Colors.light.primaryFixed,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -484,7 +485,7 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.xs,
   },
   snapshotCard: {
-    backgroundColor: theme => theme.surfaceContainerLow,
+    backgroundColor: Colors.light.surfaceContainerLow,
     borderRadius: CraftRadii.lg,
     padding: Spacing.md,
     marginBottom: Spacing.lg,
@@ -513,7 +514,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
     borderRadius: CraftRadii.pill,
-    backgroundColor: theme => theme.secondaryContainer,
+    backgroundColor: Colors.light.secondaryContainer,
   },
   perksWrapper: {
     marginBottom: Spacing.md,
@@ -525,7 +526,7 @@ const styles = StyleSheet.create({
   },
   perkCard: {
     flex: 1,
-    backgroundColor: theme => theme.surfaceContainer,
+    backgroundColor: Colors.light.surfaceContainer,
     borderRadius: CraftRadii.md,
     padding: Spacing.md,
     flexDirection: 'row',
@@ -536,7 +537,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: CraftRadii.pill,
-    backgroundColor: theme => theme.secondaryFixed,
+    backgroundColor: Colors.light.secondaryFixed,
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -25,7 +25,7 @@ import {
   resolveFailureState,
 } from '../domain/ai-job.js';
 import { runValidationPipeline } from '../domain/ai-validation-pipeline.js';
-import type { CatalogAiProvider } from '../domain/catalog-ai-provider.js';
+import type { CatalogAiImage, CatalogAiProvider } from '../domain/catalog-ai-provider.js';
 import type { CatalogProductPort } from './catalog-product-port.js';
 import type {
   AiRepository,
@@ -111,6 +111,11 @@ export class AiPipelineService {
     private readonly repository: AiRepository,
     private readonly provider: CatalogAiProvider,
     private readonly catalog: CatalogProductPort,
+    private readonly resolveImage?: (
+      mediaId: string,
+      actorId: string,
+      productId: string,
+    ) => Promise<CatalogAiImage>,
   ) {}
 
   /**
@@ -273,6 +278,16 @@ export class AiPipelineService {
     });
 
     try {
+      const imageResolver = this.resolveImage;
+      const imageReferences = started.input.media
+        .filter((item) => item.kind === 'IMAGE')
+        .slice(0, 2);
+      const images = imageResolver
+        ? await Promise.all(imageReferences.map((item) =>
+            imageResolver(item.mediaId, actorId, started.productId),
+          ))
+        : [];
+
       const raw = await this.provider.generateCatalogDraft({
         requestId: started.id,
         correlationId:
@@ -285,6 +300,7 @@ export class AiPipelineService {
         pipelineVersion: started.pipelineVersion,
         input: started.input,
         media: started.input.media,
+        ...(images.length > 0 ? { images } : {}),
       });
 
       return await this.settle(started, raw);

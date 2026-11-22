@@ -1,4 +1,4 @@
-﻿create table if not exists catalog_products (
+create table if not exists catalog_products (
   id uuid primary key,
   owner_id uuid not null,
   title text,
