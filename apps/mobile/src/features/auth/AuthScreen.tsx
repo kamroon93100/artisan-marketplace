@@ -29,7 +29,7 @@ import {
   View,
 } from 'react-native';
 
-import { Spacing } from '@/constants/theme';
+import { Spacing, CraftRadii } from '@/constants/theme';
 import { CraftEntrance, CraftPressButton, CraftStatusPill } from '@/components/craft-motion';
 import { useTheme } from '@/hooks/use-theme';
 import { PASSWORD_MIN_LENGTH } from '../../network/auth-transport';
@@ -194,12 +194,12 @@ const styles = StyleSheet.create({
   content: {
     flexGrow: 1,
     justifyContent: 'center',
-    padding: Spacing.four,
-    paddingBottom: Spacing.six,
+    padding: Spacing.lg,
+    paddingBottom: Spacing['2xl'],
   },
   copy: {
-    gap: Spacing.three,
-    paddingBottom: Spacing.five,
+    gap: Spacing.md,
+    paddingBottom: Spacing.xl,
   },
   eyebrow: {
     fontSize: 12,
@@ -207,29 +207,29 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
   },
   failure: {
-    borderRadius: Spacing.three,
+    borderRadius: CraftRadii.lg,
     borderWidth: 1,
-    padding: Spacing.three,
+    padding: Spacing.md,
   },
   failureText: {
     fontSize: 14,
     lineHeight: 20,
   },
   field: {
-    gap: Spacing.one,
+    gap: Spacing.xs,
   },
   form: {
-    gap: Spacing.four,
+    gap: Spacing.lg,
   },
   hint: {
     fontSize: 12,
   },
   input: {
-    borderRadius: Spacing.three,
+    borderRadius: CraftRadii.lg,
     borderWidth: 1,
     fontSize: 16,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.three,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
   },
   label: {
     fontSize: 13,
@@ -237,8 +237,8 @@ const styles = StyleSheet.create({
   },
   primary: {
     alignItems: 'center',
-    borderRadius: Spacing.three,
-    paddingVertical: Spacing.four,
+    borderRadius: CraftRadii.lg,
+    paddingVertical: Spacing.lg,
   },
   primaryDisabled: {
     opacity: 0.4,
@@ -252,7 +252,7 @@ const styles = StyleSheet.create({
   },
   secondary: {
     alignItems: 'center',
-    paddingVertical: Spacing.two,
+    paddingVertical: Spacing.sm,
   },
   secondaryText: {
     fontSize: 15,

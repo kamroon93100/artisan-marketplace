@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useEffect, useState } from 'react';
 
-import { Colors, Spacing } from '@/constants/theme';
+import { Colors, Spacing, CraftRadii } from '@/constants/theme';
 import { CreateProductScreen } from '@/features/capture/CreateProductScreen';
 import { useAuth } from '@/features/auth/session-provider';
 import { inquiryHistoryAction } from '@/features/inquiry/inquiry-navigation';
@@ -11,10 +11,10 @@ import {
   listLocalProductDrafts,
   type LocalProductDraft,
 } from '@/storage/product-drafts';
+import { MarketplaceHomeFeed } from '@/features/marketplace/home/MarketplaceHomeFeed';
 
 export default function HomeScreen() {
-  const [draft, setDraft] =
-    useState<LocalProductDraft | null>(null);
+  const [draft, setDraft] = useState<LocalProductDraft | null>(null);
   const [creating, setCreating] = useState(false);
   const [active, setActive] = useState(false);
   const { state, signOut } = useAuth();
@@ -82,6 +82,24 @@ export default function HomeScreen() {
     }
   }
 
+  const handleOpenProduct = (productId: string) => {
+    // Use expo-router's typed route with params
+    router.push({ pathname: '/product/[productId]', params: { productId: encodeURIComponent(productId) } } as any);
+  };
+
+  const handleOpenArtisan = (artisanId: string) => {
+    // TODO: Navigate to artisan profile
+    console.log('Open artisan:', artisanId);
+  };
+
+  const handleOpenCart = () => {
+    router.push('/cart' as any);
+  };
+
+  const handleOpenSearch = () => {
+    router.push('/search' as any);
+  };
+
   if (active && draft && ownerId) {
     return (
       <CreateProductScreen
@@ -97,16 +115,12 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.copy}>
-        <Text style={styles.eyebrow}>ARTISAN CATALOG</Text>
-        <Text style={styles.title}>
-          Make a product draft.
-        </Text>
-        <Text style={styles.subtitle}>
-          Take one photo. Record your description. We...ll save
-          the work on this phone first.
-        </Text>
-      </View>
+      <MarketplaceHomeFeed
+        onOpenProduct={handleOpenProduct}
+        onOpenArtisan={handleOpenArtisan}
+        onOpenCart={handleOpenCart}
+        onOpenSearch={handleOpenSearch}
+      />
 
       <View style={styles.account}>
         <View style={styles.accountCopy}>
@@ -169,15 +183,15 @@ const styles = StyleSheet.create({
   account: {
     alignItems: 'center',
     borderColor: Colors.light.backgroundSelected,
-    borderRadius: Spacing.three,
+    borderRadius: CraftRadii.lg,
     borderWidth: 1,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    padding: Spacing.three,
+    padding: Spacing.md,
   },
   accountCopy: {
     flex: 1,
-    gap: Spacing.one,
+    gap: Spacing.xs,
   },
   accountLabel: {
     color: Colors.light.textSecondary,
@@ -198,12 +212,12 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.light.background,
     flex: 1,
     justifyContent: 'space-between',
-    padding: Spacing.four,
-    paddingBottom: Spacing.six,
+    padding: Spacing.lg,
+    paddingBottom: Spacing['2xl'],
   },
   copy: {
-    gap: Spacing.three,
-    paddingTop: Spacing.six,
+    gap: Spacing.md,
+    paddingTop: Spacing['2xl'],
   },
   eyebrow: {
     color: Colors.light.textSecondary,
@@ -214,15 +228,15 @@ const styles = StyleSheet.create({
   existing: {
     alignItems: 'center',
     borderColor: Colors.light.backgroundSelected,
-    borderRadius: Spacing.three,
+    borderRadius: CraftRadii.lg,
     borderWidth: 1,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    padding: Spacing.three,
+    padding: Spacing.md,
   },
   existingCopy: {
     flex: 1,
-    gap: Spacing.one,
+    gap: Spacing.xs,
   },
   existingText: {
     color: Colors.light.textSecondary,
@@ -236,8 +250,8 @@ const styles = StyleSheet.create({
   primary: {
     alignItems: 'center',
     backgroundColor: Colors.light.text,
-    borderRadius: Spacing.three,
-    paddingVertical: Spacing.four,
+    borderRadius: CraftRadii.lg,
+    paddingVertical: Spacing.lg,
   },
   primaryText: {
     color: Colors.light.background,
@@ -250,15 +264,15 @@ const styles = StyleSheet.create({
   questions: {
     alignItems: 'center',
     borderColor: Colors.light.backgroundSelected,
-    borderRadius: Spacing.three,
+    borderRadius: CraftRadii.lg,
     borderWidth: 1,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    padding: Spacing.three,
+    padding: Spacing.md,
   },
   questionsCopy: {
     flex: 1,
-    gap: Spacing.one,
+    gap: Spacing.xs,
   },
   questionsText: {
     color: Colors.light.textSecondary,
@@ -270,9 +284,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   signOut: {
-    borderRadius: Spacing.three,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
+    borderRadius: CraftRadii.lg,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
   },
   signOutText: {
     color: Colors.light.text,

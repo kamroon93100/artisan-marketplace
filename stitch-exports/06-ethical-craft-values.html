@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_stack" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;1,600&family=Plus+Jakarta+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "on-secondary-container": "#765d52", "secondary-fixed": "#fddccd", "surface-container-high": "#ebe8e2", "background": "#fdf9f3", "tertiary": "#9e3d00", "on-secondary": "#ffffff", "primary-fixed": "#ffdbd0", "outline-variant": "#e1bfb5", "inverse-surface": "#31302d", "primary-fixed-dim": "#ffb59d", "error": "#ba1a1a", "on-primary-container": "#fffbff", "surface-dim": "#dddad4", "on-tertiary-container": "#fffbff", "on-tertiary": "#ffffff", "on-error-container": "#93000a", "surface-tint": "#ab3504", "on-background": "#1c1c18", "tertiary-fixed": "#ffdbcd", "on-primary": "#ffffff", "on-error": "#ffffff", "error-container": "#ffdad6", "on-primary-fixed-variant": "#842500", "tertiary-container": "#c74e00", "surface-container-low": "#f7f3ed", "surface-container": "#f1ede7", "on-secondary-fixed-variant": "#584238", "on-surface": "#1c1c18", "on-primary-fixed": "#390b00", "surface": "#fdf9f3", "primary-container": "#ca4a1c", "on-tertiary-fixed": "#360f00", "surface-container-lowest": "#ffffff", "tertiary-fixed-dim": "#ffb595", "on-surface-variant": "#59413a", "on-secondary-fixed": "#29170f", "inverse-on-surface": "#f4f0ea", "primary": "#a83301", "secondary-fixed-dim": "#e0c0b2", "surface-container-highest": "#e6e2dc", "inverse-primary": "#ffb59d", "surface-bright": "#fdf9f3", "secondary-container": "#fad9cb", "secondary": "#72594e", "on-tertiary-fixed-variant": "#7c2e00", "outline": "#8d7168", "surface-variant": "#e6e2dc" }, "borderRadius": { "DEFAULT": "1rem", "lg": "2rem", "xl": "3rem", "full": "9999px" }, "spacing": { "space-xs": "0.25rem", "space-2xl": "3rem", "space-sm": "0.5rem", "margin": "1.25rem", "gutter": "1rem", "space-md": "1rem", "margin-desktop": "2.5rem", "space-xl": "2rem", "gutter-desktop": "1.5rem", "space-lg": "1.5rem" }, "fontFamily": { "headline-lg-mobile": ["Playfair Display"], "body-sm": ["Plus Jakarta Sans"], "headline-xl-mobile": ["Playfair Display"], "headline-lg": ["Playfair Display"], "label-lg": ["Plus Jakarta Sans"], "label-md": ["Plus Jakarta Sans"], "label-sm": ["Plus Jakarta Sans"], "body-lg": ["Plus Jakarta Sans"], "headline-sm": ["Playfair Display"], "headline-md": ["Playfair Display"], "body-md": ["Plus Jakarta Sans"], "headline-xl": ["Playfair Display"] }, "fontSize": { "headline-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "600"}], "body-sm": ["12px", {"lineHeight": "18px", "fontWeight": "400"}], "headline-xl-mobile": ["30px", {"lineHeight": "38px", "letterSpacing": "-0.01em", "fontWeight": "600"}], "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600"}], "label-lg": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600"}], "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "600"}], "label-sm": ["11px", {"lineHeight": "14px", "letterSpacing": "0.03em", "fontWeight": "500"}], "body-lg": ["16px", {"lineHeight": "26px", "fontWeight": "400"}], "headline-sm": ["18px", {"lineHeight": "24px", "fontWeight": "600"}], "headline-md": ["22px", {"lineHeight": "28px", "fontWeight": "600"}], "body-md": ["14px", {"lineHeight": "22px", "fontWeight": "400"}], "headline-xl": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "600"}] } } } };</script><style>@layer base{html,body{width:100vw;margin:0;padding:0;background-color:#fdf9f3;}body{overscroll-behavior:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface font-body-md text-body-md text-on-surface antialiased flex flex-col min-h-screen"><header class="fixed top-0 w-full z-50 bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(45,36,33,0.04)] pt-safe"><div class="h-16 px-margin flex items-center justify-between"><div class="flex items-center gap-space-sm"><button aria-label="Go back" class="min-w-[44px] min-h-[44px] flex items-center justify-center text-on-surface rounded-full hover:bg-surface-container-low transition-colors" onclick="history.back()"><span class="material-symbols-outlined text-[20px]">arrow_back</span></button><img alt="Artisan Marketplace Logo" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAs_y3rfLilHa-0_ESTPfWHq9ixHaRMiiIH_L9dulgT6-kmbb0-C5U7rNZ-gHbNpwHIQscuJ_H7zSNcXqD-fP2c8omIuIvdC4aL9uxtNeVTE-JUGEoCfy_TUHpFKXHWDn1ay0YcY0er0MOpArgrdN5dJ-Cc7aaynCBskU67gsGx0qD1pKcpwxKIQLaRFcXD8UKgKW_m7kNNPVEl4VpzLr8SBbyBToY7JWMTjo1MfPPu"/><span class="font-headline-sm text-headline-sm text-on-surface tracking-tight font-semibold ml-space-xs">Values Selection</span></div><div class="flex items-center gap-space-sm"><a class="min-h-[44px] px-space-sm flex items-center font-label-md text-label-md text-primary font-medium hover:text-tertiary transition-colors" data-path="membership-welcome" href="#">Skip</a><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex-1 flex flex-col relative w-full pt-16 pb-safe bg-surface"><div class="flex flex-col w-full px-margin pb-space-2xl">
+<!-- Progress Header -->
+<div class="flex flex-col gap-space-xs mt-space-sm mb-space-lg">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-primary font-semibold">Step 4 of 6</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-medium">Ethical Standards</span>
+</div>
+<!-- Step Bar -->
+<div class="w-full h-1.5 bg-surface-container-highest rounded-full overflow-hidden flex">
+<div class="h-full bg-primary rounded-full transition-all duration-500 ease-out" style="width: 66.6%;"></div>
+</div>
+</div>
+<!-- Editorial Headline Section -->
+<div class="flex flex-col gap-space-xs mb-space-lg">
+<h1 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface font-semibold tracking-tight">
+      Shop by values that matter
+    </h1>
+<p class="font-body-md text-body-md text-on-surface-variant leading-relaxed">
+      Choose the craft standards you want highlighted across your curated feed.
+    </p>
+</div>
+<!-- Decorative Warm Prompt Pill -->
+<div class="flex items-center gap-space-sm py-2 px-3.5 bg-secondary-container/40 rounded-full self-start mb-space-md shadow-sm">
+<span class="material-symbols-outlined text-[18px] text-primary" style="font-variation-settings: 'FILL' 1;">eco</span>
+<span class="font-label-sm text-label-sm text-on-secondary-container font-medium">Curating 3 standards for your feed</span>
+</div>
+<!-- Value Checklist Cards -->
+<div class="flex flex-col gap-space-md" id="values-container">
+<!-- Value 1: Plastic-Free Packaging (Active) -->
+<div class="value-card relative flex items-start gap-space-md p-space-md rounded-2xl bg-surface-container-lowest shadow-[0_4px_20px_rgba(168,51,1,0.06)] cursor-pointer transition-all duration-300" data-checked="true">
+<div class="icon-badge w-12 h-12 rounded-full bg-secondary-container flex items-center justify-center shrink-0 text-primary transition-colors duration-300">
+<span class="material-symbols-outlined text-[24px]" style="font-variation-settings: 'FILL' 1;">package_2</span>
+</div>
+<div class="flex-1 min-w-0 pr-2">
+<div class="flex items-center justify-between">
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Plastic-Free Packaging</h2>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1 leading-normal">
+          Recyclable, compostable paper & plant-based wraps with zero non-biodegradable plastics.
+        </p>
+</div>
+<div class="toggle-track w-12 h-7 bg-primary rounded-full relative flex items-center px-1 shrink-0 transition-colors duration-300">
+<div class="toggle-thumb w-5 h-5 bg-surface rounded-full shadow-md transform translate-x-5 transition-transform duration-300"></div>
+</div>
+</div>
+<!-- Value 2: Fair Direct Payouts (Active) -->
+<div class="value-card relative flex items-start gap-space-md p-space-md rounded-2xl bg-surface-container-lowest shadow-[0_4px_20px_rgba(168,51,1,0.06)] cursor-pointer transition-all duration-300" data-checked="true">
+<div class="icon-badge w-12 h-12 rounded-full bg-secondary-container flex items-center justify-center shrink-0 text-primary transition-colors duration-300">
+<span class="material-symbols-outlined text-[24px]" style="font-variation-settings: 'FILL' 1;">volunteer_activism</span>
+</div>
+<div class="flex-1 min-w-0 pr-2">
+<div class="flex items-center justify-between">
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Fair Direct Payouts</h2>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1 leading-normal">
+          Artisans receive 85%+ of item retail value without predatory middleman deductions.
+        </p>
+</div>
+<div class="toggle-track w-12 h-7 bg-primary rounded-full relative flex items-center px-1 shrink-0 transition-colors duration-300">
+<div class="toggle-thumb w-5 h-5 bg-surface rounded-full shadow-md transform translate-x-5 transition-transform duration-300"></div>
+</div>
+</div>
+<!-- Value 3: Heritage Craft Preservation (Active) -->
+<div class="value-card relative flex items-start gap-space-md p-space-md rounded-2xl bg-surface-container-lowest shadow-[0_4px_20px_rgba(168,51,1,0.06)] cursor-pointer transition-all duration-300" data-checked="true">
+<div class="icon-badge w-12 h-12 rounded-full bg-secondary-container flex items-center justify-center shrink-0 text-primary transition-colors duration-300">
+<span class="material-symbols-outlined text-[24px]" style="font-variation-settings: 'FILL' 1;">history_edu</span>
+</div>
+<div class="flex-1 min-w-0 pr-2">
+<div class="flex items-center justify-between">
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Heritage Craft Preservation</h2>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1 leading-normal">
+          Supporting multi-generational & endangered artisanal hand-looming, pottery, and metallurgy techniques.
+        </p>
+</div>
+<div class="toggle-track w-12 h-7 bg-primary rounded-full relative flex items-center px-1 shrink-0 transition-colors duration-300">
+<div class="toggle-thumb w-5 h-5 bg-surface rounded-full shadow-md transform translate-x-5 transition-transform duration-300"></div>
+</div>
+</div>
+<!-- Value 4: Slow & Small Batch (Inactive) -->
+<div class="value-card relative flex items-start gap-space-md p-space-md rounded-2xl bg-surface-container-low/70 cursor-pointer transition-all duration-300" data-checked="false">
+<div class="icon-badge w-12 h-12 rounded-full bg-surface-container-high flex items-center justify-center shrink-0 text-on-surface-variant transition-colors duration-300">
+<span class="material-symbols-outlined text-[24px]">hourglass_top</span>
+</div>
+<div class="flex-1 min-w-0 pr-2">
+<div class="flex items-center justify-between">
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Slow & Small Batch</h2>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1 leading-normal">
+          Zero mass industrial lines. Limited edition seasonal studio runs focused on mindful durability.
+        </p>
+</div>
+<div class="toggle-track w-12 h-7 bg-surface-container-highest rounded-full relative flex items-center px-1 shrink-0 transition-colors duration-300">
+<div class="toggle-thumb w-5 h-5 bg-surface rounded-full shadow-sm transform translate-x-0 transition-transform duration-300"></div>
+</div>
+</div>
+<!-- Value 5: Locally Sourced Raw Materials (Inactive) -->
+<div class="value-card relative flex items-start gap-space-md p-space-md rounded-2xl bg-surface-container-low/70 cursor-pointer transition-all duration-300" data-checked="false">
+<div class="icon-badge w-12 h-12 rounded-full bg-surface-container-high flex items-center justify-center shrink-0 text-on-surface-variant transition-colors duration-300">
+<span class="material-symbols-outlined text-[24px]">terrain</span>
+</div>
+<div class="flex-1 min-w-0 pr-2">
+<div class="flex items-center justify-between">
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Locally Sourced Raw Materials</h2>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1 leading-normal">
+          Clays, wild harvest plant dyes, fibers & reclaimed timber responsibly sourced within 50 miles.
+        </p>
+</div>
+<div class="toggle-track w-12 h-7 bg-surface-container-highest rounded-full relative flex items-center px-1 shrink-0 transition-colors duration-300">
+<div class="toggle-thumb w-5 h-5 bg-surface rounded-full shadow-sm transform translate-x-0 transition-transform duration-300"></div>
+</div>
+</div>
+</div>
+<!-- Reassurance Artisan Pledge Banner -->
+<div class="mt-space-xl p-space-lg rounded-2xl bg-secondary-container/30 relative overflow-hidden flex flex-col gap-space-sm">
+<div class="flex items-center gap-space-sm text-primary">
+<span class="material-symbols-outlined text-[22px]" style="font-variation-settings: 'FILL' 1;">verified_user</span>
+<span class="font-label-lg text-label-lg font-semibold text-on-surface">Artisan Verified Collective</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
+      Every maker in our collective pledges adherence to verified ethical craftsmanship standards, site visits, and community transparency.
+    </p>
+<!-- Visual Craft Stamp Accent -->
+<div class="flex items-center gap-space-xs pt-1">
+<div class="flex -space-x-2">
+<div class="w-7 h-7 rounded-full bg-secondary-fixed flex items-center justify-center text-primary font-label-sm text-[10px] font-bold shadow-xs">
+          98%
+        </div>
+<div class="w-7 h-7 rounded-full bg-primary-fixed flex items-center justify-center text-on-primary-fixed-variant">
+<span class="material-symbols-outlined text-[14px]">compost</span>
+</div>
+<div class="w-7 h-7 rounded-full bg-tertiary-fixed flex items-center justify-center text-on-tertiary-fixed-variant">
+<span class="material-symbols-outlined text-[14px]">favorite</span>
+</div>
+</div>
+<span class="font-label-sm text-label-sm text-primary font-medium ml-space-xs">Audited independently</span>
+</div>
+</div>
+<!-- Bottom Floating / Fixed Action Bar Container -->
+<div class="mt-space-xl flex flex-col gap-space-sm">
+<button class="w-full min-h-[52px] px-space-lg rounded-full bg-primary text-on-primary font-label-lg text-label-lg font-semibold flex items-center justify-center gap-space-sm shadow-[0_8px_24px_rgba(168,51,1,0.28)] hover:bg-tertiary active:scale-[0.98] transition-all" id="save-btn">
+<span>Save Values & Continue</span>
+<span class="material-symbols-outlined text-[20px]">arrow_forward</span>
+</button>
+<p class="text-center font-label-sm text-label-sm text-on-surface-variant/80">
+      You can fine-tune your ethical craft filters anytime in Profile
+    </p>
+</div>
+</div>
+<script>
+  (function() {
+    const cards = document.querySelectorAll('.value-card');
+
+    cards.forEach(card => {
+      card.addEventListener('click', () => {
+        const isChecked = card.getAttribute('data-checked') === 'true';
+        const newChecked = !isChecked;
+        card.setAttribute('data-checked', newChecked ? 'true' : 'false');
+
+        const track = card.querySelector('.toggle-track');
+        const thumb = card.querySelector('.toggle-thumb');
+        const badge = card.querySelector('.icon-badge');
+
+        if (newChecked) {
+          card.classList.remove('bg-surface-container-low/70');
+          card.classList.add('bg-surface-container-lowest', 'shadow-[0_4px_20px_rgba(168,51,1,0.06)]');
+
+          badge.classList.remove('bg-surface-container-high', 'text-on-surface-variant');
+          badge.classList.add('bg-secondary-container', 'text-primary');
+          const badgeIcon = badge.querySelector('.material-symbols-outlined');
+          if (badgeIcon) badgeIcon.style.fontVariationSettings = "'FILL' 1";
+
+          track.classList.remove('bg-surface-container-highest');
+          track.classList.add('bg-primary');
+
+          thumb.classList.remove('translate-x-0');
+          thumb.classList.add('translate-x-5');
+        } else {
+          card.classList.remove('bg-surface-container-lowest', 'shadow-[0_4px_20px_rgba(168,51,1,0.06)]');
+          card.classList.add('bg-surface-container-low/70');
+
+          badge.classList.remove('bg-secondary-container', 'text-primary');
+          badge.classList.add('bg-surface-container-high', 'text-on-surface-variant');
+          const badgeIcon = badge.querySelector('.material-symbols-outlined');
+          if (badgeIcon) badgeIcon.style.fontVariationSettings = "'FILL' 0";
+
+          track.classList.remove('bg-primary');
+          track.classList.add('bg-surface-container-highest');
+
+          thumb.classList.remove('translate-x-5');
+          thumb.classList.add('translate-x-0');
+        }
+      });
+    });
+
+    const saveBtn = document.getElementById('save-btn');
+    if (saveBtn) {
+      saveBtn.addEventListener('click', () => {
+        saveBtn.classList.add('scale-[0.96]');
+        setTimeout(() => {
+          saveBtn.classList.remove('scale-[0.96]');
+          const skipLink = document.querySelector('a[data-path="membership-welcome"]');
+          if (skipLink) {
+            skipLink.click();
+          }
+        }, 180);
+      });
+    }
+  })();
+</script></main></body></html>

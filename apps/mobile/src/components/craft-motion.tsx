@@ -155,8 +155,8 @@ export function CraftStatusPill({ text, tone = 'neutral' }: { text: string; tone
 }
 
 const styles = StyleSheet.create({
-  button: { minHeight: 48, paddingHorizontal: Spacing.three, paddingVertical: 12, borderRadius: CraftRadii.md, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.two },
+  button: { minHeight: 48, paddingHorizontal: Spacing.md, paddingVertical: 12, borderRadius: CraftRadii.md, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm },
   label: { fontSize: 15, fontWeight: '700', letterSpacing: 0.15 },
   pill: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: CraftRadii.pill, borderWidth: 1 },
   pillText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase' },

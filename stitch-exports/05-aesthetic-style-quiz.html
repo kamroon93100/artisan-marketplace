@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_stack" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;1,600&family=Plus+Jakarta+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "on-secondary-container": "#765d52", "secondary-fixed": "#fddccd", "surface-container-high": "#ebe8e2", "background": "#fdf9f3", "tertiary": "#9e3d00", "on-secondary": "#ffffff", "primary-fixed": "#ffdbd0", "outline-variant": "#e1bfb5", "inverse-surface": "#31302d", "primary-fixed-dim": "#ffb59d", "error": "#ba1a1a", "on-primary-container": "#fffbff", "surface-dim": "#dddad4", "on-tertiary-container": "#fffbff", "on-tertiary": "#ffffff", "on-error-container": "#93000a", "surface-tint": "#ab3504", "on-background": "#1c1c18", "tertiary-fixed": "#ffdbcd", "on-primary": "#ffffff", "on-error": "#ffffff", "error-container": "#ffdad6", "on-primary-fixed-variant": "#842500", "tertiary-container": "#c74e00", "surface-container-low": "#f7f3ed", "surface-container": "#f1ede7", "on-secondary-fixed-variant": "#584238", "on-surface": "#1c1c18", "on-primary-fixed": "#390b00", "surface": "#fdf9f3", "primary-container": "#ca4a1c", "on-tertiary-fixed": "#360f00", "surface-container-lowest": "#ffffff", "tertiary-fixed-dim": "#ffb595", "on-surface-variant": "#59413a", "on-secondary-fixed": "#29170f", "inverse-on-surface": "#f4f0ea", "primary": "#a83301", "secondary-fixed-dim": "#e0c0b2", "surface-container-highest": "#e6e2dc", "inverse-primary": "#ffb59d", "surface-bright": "#fdf9f3", "secondary-container": "#fad9cb", "secondary": "#72594e", "on-tertiary-fixed-variant": "#7c2e00", "outline": "#8d7168", "surface-variant": "#e6e2dc" }, "borderRadius": { "DEFAULT": "1rem", "lg": "2rem", "xl": "3rem", "full": "9999px" }, "spacing": { "space-xs": "0.25rem", "space-2xl": "3rem", "space-sm": "0.5rem", "margin": "1.25rem", "gutter": "1rem", "space-md": "1rem", "margin-desktop": "2.5rem", "space-xl": "2rem", "gutter-desktop": "1.5rem", "space-lg": "1.5rem" }, "fontFamily": { "headline-lg-mobile": ["Playfair Display"], "body-sm": ["Plus Jakarta Sans"], "headline-xl-mobile": ["Playfair Display"], "headline-lg": ["Playfair Display"], "label-lg": ["Plus Jakarta Sans"], "label-md": ["Plus Jakarta Sans"], "label-sm": ["Plus Jakarta Sans"], "body-lg": ["Plus Jakarta Sans"], "headline-sm": ["Playfair Display"], "headline-md": ["Playfair Display"], "body-md": ["Plus Jakarta Sans"], "headline-xl": ["Playfair Display"] }, "fontSize": { "headline-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "600"}], "body-sm": ["12px", {"lineHeight": "18px", "fontWeight": "400"}], "headline-xl-mobile": ["30px", {"lineHeight": "38px", "letterSpacing": "-0.01em", "fontWeight": "600"}], "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600"}], "label-lg": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600"}], "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "600"}], "label-sm": ["11px", {"lineHeight": "14px", "letterSpacing": "0.03em", "fontWeight": "500"}], "body-lg": ["16px", {"lineHeight": "26px", "fontWeight": "400"}], "headline-sm": ["18px", {"lineHeight": "24px", "fontWeight": "600"}], "headline-md": ["22px", {"lineHeight": "28px", "fontWeight": "600"}], "body-md": ["14px", {"lineHeight": "22px", "fontWeight": "400"}], "headline-xl": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "600"}] } } } };</script><style>@layer base{html,body{width:100vw;margin:0;padding:0;background-color:#fdf9f3;}body{overscroll-behavior:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface font-body-md text-body-md text-on-surface antialiased flex flex-col min-h-screen"><header class="fixed top-0 w-full z-50 bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(45,36,33,0.04)] pt-safe"><div class="h-16 px-margin flex items-center justify-between"><div class="flex items-center gap-space-sm"><button aria-label="Go back" class="min-w-[44px] min-h-[44px] flex items-center justify-center text-on-surface rounded-full hover:bg-surface-container-low transition-colors" onclick="history.back()"><span class="material-symbols-outlined text-[20px]">arrow_back</span></button><img alt="Artisan Marketplace Logo" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAs_y3rfLilHa-0_ESTPfWHq9ixHaRMiiIH_L9dulgT6-kmbb0-C5U7rNZ-gHbNpwHIQscuJ_H7zSNcXqD-fP2c8omIuIvdC4aL9uxtNeVTE-JUGEoCfy_TUHpFKXHWDn1ay0YcY0er0MOpArgrdN5dJ-Cc7aaynCBskU67gsGx0qD1pKcpwxKIQLaRFcXD8UKgKW_m7kNNPVEl4VpzLr8SBbyBToY7JWMTjo1MfPPu"/><span class="font-headline-sm text-headline-sm text-on-surface tracking-tight font-semibold ml-space-xs">Aesthetic Style Quiz</span></div><div class="flex items-center gap-space-sm"><a class="min-h-[44px] px-space-sm flex items-center font-label-md text-label-md text-primary font-medium hover:text-tertiary transition-colors" data-path="membership-welcome" href="#">Skip</a><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex-1 flex flex-col relative w-full pt-16 pb-safe bg-surface"><div class="flex flex-col w-full px-margin pb-space-2xl">
+<!-- Progress Header -->
+<div class="pt-space-md pb-space-xs flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-on-surface-variant tracking-wider uppercase">Style Profile Quiz</span>
+<span class="font-label-md text-label-md text-primary font-semibold">Step 3 of 6</span>
+</div>
+<!-- Custom Multi-step Indicator Bar -->
+<div class="w-full h-1.5 bg-surface-container rounded-full overflow-hidden flex gap-1 p-0.5">
+<div class="h-full bg-primary rounded-full w-1/6"></div>
+<div class="h-full bg-primary rounded-full w-1/6"></div>
+<div class="h-full bg-primary rounded-full w-1/6"></div>
+<div class="h-full bg-surface-container-highest rounded-full w-1/6"></div>
+<div class="h-full bg-surface-container-highest rounded-full w-1/6"></div>
+<div class="h-full bg-surface-container-highest rounded-full w-1/6"></div>
+</div>
+</div>
+<!-- Editorial Headline Section -->
+<div class="pt-space-md pb-space-lg text-center flex flex-col items-center">
+<div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-secondary-container/50 mb-space-sm">
+<span class="material-symbols-outlined text-[16px] text-primary" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+<span class="font-label-sm text-label-sm text-on-secondary-container font-medium">Curated Pairing Engine</span>
+</div>
+<h1 class="font-headline-xl-mobile text-headline-xl-mobile text-on-surface tracking-tight max-w-[280px]">
+      Which aesthetic feels like home?
+    </h1>
+<p class="font-body-md text-body-md text-on-surface-variant mt-space-xs max-w-[310px]">
+      We match handcrafted maker pieces to your personal design sensibility.
+    </p>
+</div>
+<!-- Interactive Aesthetic Cards Grid -->
+<div class="flex flex-col gap-space-md" id="aesthetic-card-group">
+<!-- Option 1: Wabi-Sabi & Earthy (Selected State) -->
+<div aria-checked="true" class="aesthetic-option relative group cursor-pointer w-full rounded-lg p-space-md bg-secondary-container/40 shadow-sm transition-all duration-300 transform active:scale-[0.98]" onclick="selectOption(this)" role="radio" tabindex="0">
+<!-- Selection Indicator Pill Badge -->
+<div class="status-indicator absolute top-3 right-3 w-7 h-7 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-[18px]">check</span>
+</div>
+<div class="flex items-center gap-space-md">
+<!-- Organic Pebble Frame Image -->
+<div class="relative w-24 h-24 shrink-0 rounded-lg overflow-hidden bg-surface-container shadow-inner">
+<img class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" data-alt="Close-up of tactile wabi-sabi ceramic mug and textured earthenware vase sitting on an unpolished raw wooden table. Sunlit cozy craft workshop aesthetic with warm terracotta tones, muted neutral linen cloth, and gentle shadows emphasizing organic handmade imperfections." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAyPmx9G9POr0ZCYLk54poH3U_b79bsTuq2iY7MdfsGLIPT96AsBYM_7xcbT-HGgeLZC6_Ky70oPXF9BHTZLrXBpOnh383snG6EXsDSYhNw-yRqA-LkTnJcPHlOxRvnl_6wSsj78ISSqe4GuruQgwD4t038HicsaVoC4i8TyrELVTPxByVbC1H46dekEtJpr8k8FPTIDx3f-4ocS54giupaNzIbJbHHz_lJMaZ-ab4z"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent"></div>
+</div>
+<!-- Copy Details -->
+<div class="flex flex-col min-w-0 pr-space-md">
+<div class="flex items-center gap-1.5">
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold truncate">Wabi-Sabi & Earthy</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5 line-clamp-2">
+            Raw textures, stoneware clay, natural organic imperfections & muted warm neutrals.
+          </p>
+<div class="flex items-center gap-space-xs mt-2">
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded-full bg-surface-container-lowest text-primary font-medium">Textured clay</span>
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded-full bg-surface-container-lowest text-on-surface-variant">Unglazed</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Option 2: Warm Minimalist -->
+<div aria-checked="false" class="aesthetic-option relative group cursor-pointer w-full rounded-lg p-space-md bg-surface-container-low shadow-sm transition-all duration-300 transform active:scale-[0.98]" onclick="selectOption(this)" role="radio" tabindex="0">
+<div class="status-indicator absolute top-3 right-3 w-7 h-7 rounded-full bg-surface-container-highest text-on-surface-variant/40 flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">radio_button_unchecked</span>
+</div>
+<div class="flex items-center gap-space-md">
+<!-- Pebble Frame Image -->
+<div class="relative w-24 h-24 shrink-0 rounded-lg overflow-hidden bg-surface-container shadow-inner">
+<img class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" data-alt="Sun-drenched Scandinavian living nook with a light blonde ash wood chair, crisp natural oat linen cushions, a sculpted smooth off-white vase with a single dried stem, clean architectural lines and warm peaceful aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD4TlLZgbOJWXJ1UBrsyka7Zo6TQCLyytrJhMEZsKX4vubCBJvtFSbYEeTTeL8RRmf5soUJxR7wCS6gpBQES_FFZVGlvvOUsSboHou8bt5NvDwSgF599vJ3wrgcCrX-on3fw4VsoaO_hmThiLBHy1BjCkP1YdUf5pMNEm-dymHOWYoxgF2gr7qMEFnzjmEv4VrMq3WTGS1OiDUkhOcMqHY8lGseWxnAxfl6sRiUZSFb"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent"></div>
+</div>
+<!-- Copy Details -->
+<div class="flex flex-col min-w-0 pr-space-md">
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold truncate">Warm Minimalist</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5 line-clamp-2">
+            Clean silhouettes, light woods, washed linen & functional bespoke design objects.
+          </p>
+<div class="flex items-center gap-space-xs mt-2">
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant">Pale wood</span>
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant">Linen</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Option 3: Bohemian Artisan -->
+<div aria-checked="false" class="aesthetic-option relative group cursor-pointer w-full rounded-lg p-space-md bg-surface-container-low shadow-sm transition-all duration-300 transform active:scale-[0.98]" onclick="selectOption(this)" role="radio" tabindex="0">
+<div class="status-indicator absolute top-3 right-3 w-7 h-7 rounded-full bg-surface-container-highest text-on-surface-variant/40 flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">radio_button_unchecked</span>
+</div>
+<div class="flex items-center gap-space-md">
+<!-- Pebble Frame Image -->
+<div class="relative w-24 h-24 shrink-0 rounded-lg overflow-hidden bg-surface-container shadow-inner">
+<img class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" data-alt="Artisanal handwoven crochet bag with delicate pastel fringes and colorful tassel accents hanging beside macramé wall tapestries. Radiant sunny craft market display with vibrant woven threads, cozy tactile textures, and boho chic styling." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDpKTjPCixrNH6WpmqMeWVfuhSYy_N59G1hH91yQolaXt0JL34IVANQj_m0CoW0YpjRbOEKAdroJBIx0nrl1-qXUizjcs9R2ZmfhFf8gtR79r6Ugnr-onmQ1W8e2qE4Gr-rC-yKqtEEeSLaPbkv4n-D6Q8wavNjHANtCrTyLNPM1wW1VGKt0P151czE86iBAbIU-_1vAkzEfgoQDik2vFmyPRihnciSCn8C16rw-dux"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent"></div>
+</div>
+<!-- Copy Details -->
+<div class="flex flex-col min-w-0 pr-space-md">
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold truncate">Bohemian Artisan</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5 line-clamp-2">
+            Handwoven crochet, macramé details, playful colorful tassels & rich craft textiles.
+          </p>
+<div class="flex items-center gap-space-xs mt-2">
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant">Crochet</span>
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant">Macramé</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Option 4: Cottagecore & Botanical -->
+<div aria-checked="false" class="aesthetic-option relative group cursor-pointer w-full rounded-lg p-space-md bg-surface-container-low shadow-sm transition-all duration-300 transform active:scale-[0.98]" onclick="selectOption(this)" role="radio" tabindex="0">
+<div class="status-indicator absolute top-3 right-3 w-7 h-7 rounded-full bg-surface-container-highest text-on-surface-variant/40 flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">radio_button_unchecked</span>
+</div>
+<div class="flex items-center gap-space-md">
+<!-- Pebble Frame Image -->
+<div class="relative w-24 h-24 shrink-0 rounded-lg overflow-hidden bg-surface-container shadow-inner">
+<img class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" data-alt="Pressed wild chamomile botanical frame, small glass apothecary perfume vials filled with dried herbs, and hand-embroidered floral table runners. Romantic nostalgic sunlight filtering through a cottage windowsill with warm vintage tones." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBPAw7Hw7L9sqRqdGSWiFl_eVoNvTktb24hTlO-LHxUlaqPyT4WI33_uKeS-dCzqkff2ZMccLaCDyLsnUEYf9Cx6Jtaira9rlPaHDj6DJakmaPG5k_vtVo7puZ8WWBJyVtznbBVicZlwCM7gzmHUT0OeTlJ76UuvSBUFUuz1O54XwUhBVStOGzRJDBBDFmSUMIdpvBPVFEnKCuvXY3Y10_WESvEtOpLLrEPCnnskVgn"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent"></div>
+</div>
+<!-- Copy Details -->
+<div class="flex flex-col min-w-0 pr-space-md">
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold truncate">Cottagecore & Botanical</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5 line-clamp-2">
+            Pressed floral art, delicate botanical embroidery & nostalgic vintage apothecary glassware.
+          </p>
+<div class="flex items-center gap-space-xs mt-2">
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant">Botanicals</span>
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant">Embroidery</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Warm Note Card -->
+<div class="mt-space-lg p-space-md rounded-lg bg-surface-container-lowest/80 flex items-start gap-space-sm shadow-sm">
+<div class="w-8 h-8 rounded-full bg-primary-fixed flex items-center justify-center shrink-0 text-primary">
+<span class="material-symbols-outlined text-[18px]">loyalty</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface font-semibold">Tuned to small-batch studios</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
+        Selecting your primary aesthetic unlocks direct releases from independent ceramicists and fiber artists matching this mood.
+      </p>
+</div>
+</div>
+<!-- Bottom Fixed-Feel Sticky Action Bar -->
+<div class="mt-space-xl flex flex-col gap-space-sm">
+<button class="w-full py-4 px-space-xl bg-primary text-on-primary rounded-full font-label-lg text-label-lg shadow-md hover:bg-tertiary-container active:scale-[0.98] transition-all flex items-center justify-center gap-space-sm" id="continue-button" type="button">
+<span>Continue</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+<p class="text-center font-body-sm text-body-sm text-on-surface-variant">
+      You can refine or add multiple aesthetics later in your profile.
+    </p>
+</div>
+</div>
+<script>
+  function selectOption(targetCard) {
+    const cards = document.querySelectorAll('.aesthetic-option');
+    cards.forEach(card => {
+      card.setAttribute('aria-checked', 'false');
+      card.classList.remove('bg-secondary-container/40');
+      card.classList.add('bg-surface-container-low');
+
+      const indicator = card.querySelector('.status-indicator');
+      if (indicator) {
+        indicator.className = 'status-indicator absolute top-3 right-3 w-7 h-7 rounded-full bg-surface-container-highest text-on-surface-variant/40 flex items-center justify-center transition-all duration-200';
+        indicator.innerHTML = '<span class="material-symbols-outlined text-[18px]">radio_button_unchecked</span>';
+      }
+    });
+
+    // Mark current selected
+    targetCard.setAttribute('aria-checked', 'true');
+    targetCard.classList.remove('bg-surface-container-low');
+    targetCard.classList.add('bg-secondary-container/40');
+
+    const activeIndicator = targetCard.querySelector('.status-indicator');
+    if (activeIndicator) {
+      activeIndicator.className = 'status-indicator absolute top-3 right-3 w-7 h-7 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-sm transition-all duration-200 scale-110';
+      activeIndicator.innerHTML = '<span class="material-symbols-outlined text-[18px]">check</span>';
+      setTimeout(() => {
+        activeIndicator.classList.remove('scale-110');
+      }, 150);
+    }
+  }
+</script></main></body></html>
